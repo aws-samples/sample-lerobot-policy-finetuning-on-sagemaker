@@ -1,0 +1,117 @@
+# Registry entry: MolmoAct2 (Molmo2-4B VLM + flow-matching action expert), lerobot 0.6.1 policy type "molmoact2".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+# Flag names verified against policies/molmoact2/configuration_molmoact2.py and configs/train.py in the release image (2026-09-10).
+name: molmoact2
+display_name: MolmoAct2 (Molmo2-4B + flow-matching action expert)
+tier: 2
+status: smoke-tested     # 200-step GPU smoke passed 2026-09-14 on hjkso1406/so101-4tasks-100eps @ 52df842e (docs/RESULTS.md)
+deliverable: false
+lerobot_type: molmoact2
+precision: fp32_masters_bf16_autocast   # --policy.model_dtype=float32 keeps fp32 masters; bf16 autocast comes from amp_driver.py
+base_checkpoint: allenai/MolmoAct2       # loaded via --policy.checkpoint_path (NOT --policy.path); 21.8 GB fp32 shards
+hub_artifacts:               # snapshot_download at policy construction; a local dir is accepted by checkpoint_path
+  - {repo: allenai/MolmoAct2, revision: e432d85f6e039edca44afb93c262f3084ab72a9c, role: base policy weights + processor/tokenizer/norm stats, gated: false}  # pragma: allowlist secret
+  - {repo: allenai/MolmoAct2-FAST-Tokenizer, revision: d45593b4c863d0bc1ca064f8b352fa16b75c38e8, role: discrete action tokenizer, only when action_mode != continuous (not used by this recipe), gated: false}  # pragma: allowlist secret
+requires_flat_action_names: true       # the gripper mask scans feature names for "gripper"; nested name dicts are UNVERIFIED
+max_action_dim: 32                  # actions are zero-padded to 32 dims inside the policy (padding masked in the loss); wider datasets are refused
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+requires_quantile_stats: true          # state is quantile-normalised: the trainer completes q01/q99 in stats.json (ensure_quantiles.py) when missing
+camera_mapping_required: false         # --policy.image_keys is optional; empty means every VISUAL feature in dataset order
+smoke_candidate: true        # 200 steps on ml.g6e.4xlarge, hjkso1406/so101-4tasks-100eps (q01/q99 shipped); 21.8 GB base staged by the hub job
+stub_reason: null            # promoted 2026-09-14: smoke PASS at 0.32 steps/s on L40S (batch 8, fp32 masters), 100% tensors moved, reload ok (docs/RESULTS.md)
+
+licence:
+  class: research_only       # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: null                 # no licence tag or file on the allenai/MolmoAct2 card; only the GitHub code is Apache-2.0
+  url: https://allenai.org/responsible-use
+  commercial_use: "no"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    allenai/MolmoAct2 declares no licence on its Hub card. The github.com/allenai/molmoact2 LICENSE (code) is
+    Apache-2.0, and the lerobot documentation says the model "is intended for research and educational use in
+    accordance with Ai2's Responsible Use Guidelines". The Molmo2-4B backbone is Apache-2.0, but its card states it is
+    trained on third-party datasets "subject to academic and non-commercial research use only" (Molmo2-ER-VST-P is CC
+    BY-NC 4.0). Fine-tunes inherit these restrictions. Treat any checkpoint as research-only.
+
+hardware:
+  vram_gb: 40                # estimated, not measured: 5.44 B fp32 weights (21.8 GB) + fp32 grads/AdamW for the action expert + LoRA
+  min_gpu_memory_gb: 48      # published H100 figures (bf16): LoRA-VLM bs8 20.2 GiB, full fine-tune bs8 48.3 GiB
+  checkpoint_gb: 28            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (MEASURED 2026-09-14: 21.8 GB weights + ~5.8 GB optimizer state (LoRA VLM); 21.8 GB base staged)
+  hub_gb: 22                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.p5.4xlarge, ml.g7e.4xlarge, ml.g6e.4xlarge]   # ml.g6e.4xlarge (48 GB) is marginal for this recipe
+  step_rate:
+    L40S: 0.32             # measured, 200-step smoke 2026-09-14, batch 8, fp32 masters + bf16 autocast, LoRA VLM + expert
+
+defaults:                    # the lerobot doc's "<200 demonstrations" guidance: global batch 16-32, LoRA-VLM
+  steps: 10000
+  batch_size: 8
+  chunk: 30                  # checkpoint max_action_horizon is 30 and the port has no horizon masking: never exceed 30
+  save_freq: 2000
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=molmoact2
+    - --policy.inference_action_mode=continuous   # required: _resolve_inference_action_mode raises when unset (modeling_molmoact2.py:274-279)
+    - --policy.checkpoint_path=allenai/MolmoAct2   # LoRA requires checkpoint_path; --policy.path is not the loading path here
+    - --policy.model_dtype=float32           # default bfloat16 trains bf16 weights directly (AdamW-update-underflow trap)
+    - --policy.action_mode=continuous        # skips the FAST tokenizer download; discrete tokens are unverified above 14 dims
+    - --policy.enable_lora_vlm=true          # VLM frozen + LoRA r=64; the action expert stays fully trainable
+    - --policy.gradient_checkpointing=true
+    - --policy.freeze_embedding=true
+    - --policy.normalize_gripper=true        # dims named *gripper* outside [-1,1] otherwise raise "Please set normalize_gripper=True"
+    - --policy.setup_type=single robotic arm       # rendered into the prompt as <setup>...</setup>; override per dataset
+    - --policy.control_mode=absolute joint pose    # rendered as <control>...</control>; mirrors the yam_dual_molmoact2 tag
+    - --policy.chunk_size=${CHUNK}           # must be <= 30 (see defaults.chunk)
+    - --policy.n_action_steps=${CHUNK}
+    - --policy.scheduler_decay_steps=${STEPS}   # default 100000 would leave a shorter run on the warm end of the cosine
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: cosine_decay_with_warmup   # 'extend' must also pass the top-level --scheduler.num_decay_steps
+  forbidden_flags:
+    - --policy.model_dtype=bfloat16          # bf16 masters: the non-LoRA action-expert updates vanish below the bf16 ULP
+    - --policy.model_dtype=float16
+    - --policy.path                          # loads a lerobot-format checkpoint; the base must come through checkpoint_path
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC; PyAV is used
+
+eval:
+  policy_arg: molmoact2
+  n_samples: 4               # continuous flow-matching sampling is stochastic; predict_action_chunk rejects an action_mode kwarg
+  history_frames: 1          # n_obs_steps=1, observation_delta_indices=None
+
+smoke:
+  steps: 200
+  max_minutes: 150           # five full 21.8 GB fp32 loads + a 22 GB checkpoint + tar: the default 60-min smoke cap is too short
+  checks_device: cpu         # smoke_checks builds a second full policy: two 21.8 GB copies do not fit one 48 GB GPU
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: dataset action space, zero-padded to 32 dims (padding masked in the loss) and cropped on output
+  control_rate: dataset fps
+  notes: >-
+    Images are resized to one 378x378 crop each (196 tokens). State is quantile-normalised (needs q01/q99 in
+    stats.json; otherwise run augment_dataset_quantile_stats.py or override normalization_mapping) and discretised
+    into 256 bins. enable_inference_cuda_graph defaults to true. Disable it for open-loop evaluation on variable batch
+    shapes.

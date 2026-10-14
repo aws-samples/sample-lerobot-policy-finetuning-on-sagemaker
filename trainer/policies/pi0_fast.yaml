@@ -1,0 +1,133 @@
+# Registry entry: pi0-FAST (Physical Intelligence, ported from openpi), lerobot 0.6.1 policy type "pi0_fast". PaliGemma-3B predicting
+# FAST (DCT + BPE) action tokens autoregressively, 2.9B params, fine-tuned from lerobot/pi0fast-base. Maintainer-owned facts.
+name: pi0_fast
+display_name: pi0-FAST (PaliGemma-3B, autoregressive FAST action tokens, fine-tuned from lerobot/pi0fast-base)
+tier: 2
+status: smoke-tested     # two independent 200-step smokes passed 2026-09-15 on 80 GB H100s (offline on EC2 hosts with the same container contract as the SageMaker job; docs/RESULTS.md) Release image sha256:65bd643b: 200-step smoke PASS on an EC2 p5.4xlarge 2026-09-21 (1.67 steps/s at batch 4, peak 68.1 GB, exact reload; docs/RESULTS.md).
+deliverable: false
+lerobot_type: pi0_fast
+precision: fp32_masters_bf16_autocast   # --policy.dtype=float32 + amp_driver.py bf16 autocast (lerobot_train.py:248 maps float32 -> "no")
+base_checkpoint: lerobot/pi0fast-base   # HYPHEN: lerobot/pi0fast_base does not exist (401)
+hub_artifacts:               # everything fetched by name at run time -> the hub job stages these to S3 (training runs isolated)
+  - repo: lerobot/pi0fast-base
+    revision: acbfee34e383700f64ede42e3ac7e89027dd43c2   # pinned 2026-09-14 (HF API); ~11.7 GB fp32 safetensors  # pragma: allowlist secret
+    role: base_weights
+    gated: false
+  - repo: google/paligemma-3b-pt-224
+    revision: 35e4f46485b4d07967e7e9935bc3786aad50687c   # pinned 2026-09-14  # pragma: allowlist secret
+    role: text_tokenizer     # PI0FastConfig.text_tokenizer_name; gated "manual": the HF token's account must have accepted Google's terms
+    gated: true
+  - repo: lerobot/fast-action-tokenizer
+    revision: 3d4d8dd847c5333f1cb0f54d00074ba22b14a5b7   # pinned 2026-09-14; loaded with trust_remote_code=True (tokenizer_processor.py:379)  # pragma: allowlist secret
+    role: action_tokenizer   # PI0FastConfig.action_tokenizer_name; Apache-2.0 card tag (verified 2026-09-14), byte-identical code to physical-intelligence/fast
+    gated: false
+requires_flat_action_names: false   # only --policy.use_relative_actions=true reads action names (relative_exclude_joints)
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+max_action_dim: 32                  # actions are padded to 32 dims inside the policy; wider datasets cannot be fine-tuned
+camera_mapping_required: false      # pretrained_path takes camera keys from the dataset; slot order (base, L wrist, R wrist) = feature order
+# Weight-load check is NOT automated: look for "All keys loaded successfully!" in the training log (modeling_pi0_fast.py:904); on any error the loader returns a RANDOM model (:859, lerobot issue #4577)
+smoke_candidate: true        # needs an 80 GB GPU (ml.p5.4xlarge / ml.g7e.4xlarge): no freeze_vision_encoder / train_expert_only in PI0FastConfig and no default PEFT targets
+                             # (pretrained.py:512), so fp32 masters train all 2.9B params (~47 GB before activations); LoRA via explicit --peft.target_modules is untested
+stub_reason: null            # promoted 2026-09-15: 1.61-1.67 steps/s at batch 4, 68 GB peak, gate clean on an H100; NEEDS an 80 GB GPU (ml.p5.4xlarge / ml.g7e.4xlarge), never a 48 GB L40S
+
+licence:
+  class: terms               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: null                 # Gemma Terms of Use have no SPDX id; Hub tag "gemma". The lerobot docs' "Apache 2.0" covers code only.
+  url: https://ai.google.dev/gemma/terms
+  commercial_use: "terms"
+  weights_fetched_by: job
+  gated: true                # the tokenizer repo; the checkpoint itself is not gated
+  requires_accept: true
+  requires_approval: false
+  verified_on: "2026-09-23"
+  notice: >-
+    lerobot/pi0fast-base is tagged "gemma" on the Hub with no LICENSE file. Its PaliGemma-3B backbone is listed in the
+    Gemma Terms of Use appendix (PaliGemma was NOT relicensed to Apache-2.0 with Gemma 4). A fine-tune is a Model
+    Derivative under those terms. Section 3.1 requires passing the use restrictions through, a copy of the Agreement
+    and a notice ("Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms").
+    Section 3.2 incorporates the Prohibited Use Policy and a remote-restriction right. Section 4.5 requires deletion
+    on termination. The FAST action tokenizer (lerobot/fast-action-tokenizer) runs as remote code; its Hub card carries
+    a license:apache-2.0 tag with no LICENSE file (checked 2026-09-23). The pretraining corpus cannot be audited. Legal sign-off is needed before any
+    commercial use or distribution.
+
+hardware:
+  vram_gb: 68                # MEASURED 2026-09-15 on an 80 GB H100 (batch 4, chunk 10, fp32 masters + bf16 autocast, gradient checkpointing): nvidia-smi peak 68.1 GB, torch 64.4 GB
+  min_gpu_memory_gb: 80
+  checkpoint_gb: 36            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (ESTIMATE: 11.7 GB fp32 weights x 3 (AdamW) ~ 36 GB; pi0fast-base 11.7 GB + tokenizers staged)
+  hub_gb: 12                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.p5.4xlarge, ml.g7e.4xlarge, ml.p4de.24xlarge]   # 80/96/80 GB per GPU; these quotas default to 0 in new accounts, request them before use
+  step_rate:
+    H100: 1.61             # measured 2026-09-15 on 80 GB H100s, two runs (1.61-1.67 steps/s), batch 4, chunk 10, fp32 masters + bf16 autocast, release image (docs/RESULTS.md)
+
+defaults:                    # docs recipe (--policy.chunk_size=10 --policy.n_action_steps=10 --batch_size=4); smoke-tested only (200 steps), no full run by this repo
+  steps: 3000                # docs say 100000 at batch 4; no full run recorded here, size to your dataset
+  batch_size: 4
+  chunk: 10                  # FAST tokens for the chunk must fit max_action_tokens=256; docs use 10 (0.33 s at 30 fps)
+  save_freq: 1000            # each checkpoint is ~11.7 GB in fp32: budget disk and S3 accordingly
+  log_freq: 100
+  seed: 1000
+
+base_patches:                # applied by train_policy.sh to the staged lerobot/pi0fast-base snapshot before training: the shipped
+  - file: policy_preprocessor.json          # policy_preprocessor.json names physical-intelligence/fast for the action_tokenizer_processor step
+    replace_text: {"physical-intelligence/fast": "${HUB:lerobot/fast-action-tokenizer}"}   # (lerobot_train overrides only device/normalizer);
+                                            # that repo has no tokenizer.json (needs sentencepiece, not installed) -> point the step at the staged
+                                            # snapshot dir of lerobot/fast-action-tokenizer instead (policy_postprocessor.json has no occurrence)
+train:
+  local_repo_args:             # passed as --policy.<field>=<staged snapshot dir>: AutoProcessor(trust_remote_code) probes bpe_tokenizer/config.json,
+    - {flag: --policy.action_tokenizer_name, repo: lerobot/fast-action-tokenizer}   # a tolerated 404 online but a hard error under HF_HUB_OFFLINE=1
+    - {flag: --policy.text_tokenizer_name, repo: google/paligemma-3b-pt-224}        # verified 2026-09-15 on an 80 GB H100 under HF_HUB_OFFLINE=1 (docs/RESULTS.md)
+  # ${VAR} placeholders are filled from the trainer's environment (same names as act.yaml).
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=pi0_fast
+    - --policy.pretrained_path=lerobot/pi0fast-base   # weights only; features from the dataset (--policy.path inherits ALOHA keys)
+    - --policy.dtype=float32              # fp32 masters (explicit); bf16 autocast is added by amp_driver.py
+    - --policy.gradient_checkpointing=true
+    - --policy.chunk_size=${CHUNK}
+    - --policy.n_action_steps=${CHUNK}    # max_action_tokens stays at its default 256 (the docs recipe pins the same value)
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: cosine_decay_with_warmup   # warmup 1000 / decay 30000 -> 2.5e-6, auto-scaled when --steps < 30000; above, pass --policy.scheduler_decay_steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC (static Python); PyAV is used
+    - --policy.dtype=bfloat16                # HARD CAST (modeling_pi0_fast.py:150): bf16 masters, AdamW updates below the ULP vanish
+    - --policy.use_amp=true                  # silently ignored: policies with a dtype field bypass use_amp (lerobot_train.py:253)
+    - --policy.path                          # inherits pi0fast-base's ALOHA input_features
+    - --rename_map                           # with pretrained_path it renames the batch away (docs); mapping is a pipeline concern
+    - --policy.compile_model=true            # max-autotune: minutes of Triton autotuning, shared-memory errors on some GPUs (#2471)
+    - --policy.freeze_vision_encoder         # does not exist in PI0FastConfig 0.6.1 (copy-paste from the pi0 recipe fails to parse)
+    - --policy.train_expert_only             # does not exist in PI0FastConfig 0.6.1
+
+eval:
+  policy_arg: pi0_fast
+  n_samples: 1               # deterministic: temperature=0.0 greedy decoding (max_decoding_steps 256, KV cache)
+  history_frames: 1          # no n_obs_steps field (single frame); predict_action_chunk exists (modeling_pi0_fast.py:1209)
+
+smoke:
+  steps: 200
+  max_minutes: 120           # 11.7 GB base load + autoregressive FAST decoding in the eval; keep evaluation.heldout small (4 episodes)
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: absolute joint positions (MEAN_STD normalised; padded to 32 dims, FAST-decoded back to a chunk)
+  control_rate: dataset fps
+  notes: >-
+    The prompt embeds the task string and 256-bin state integers (tokenizer_max_length 200). Autoregressive decoding
+    of up to 256 action tokens per chunk is slower than the flow-matching policies. Images letterboxed to 224x224.
+    Checkpoint about 11.7 GB.

@@ -1,0 +1,108 @@
+# Registry entry: EO-1 (Qwen2.5-VL-3B backbone + flow-matching action head), lerobot 0.6.1 policy type "eo1".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+# Flag names verified against policies/eo1/configuration_eo1.py and configs/train.py in the release image (2026-09-10).
+name: eo1
+display_name: EO-1 (Qwen2.5-VL-3B + flow-matching head)
+tier: 2
+status: smoke-tested     # 200-step smoke passed 2026-09-15 on an 80 GB H100 (offline on an EC2 p5.4xlarge with the same container contract as the SageMaker job; docs/RESULTS.md) Release image sha256:65bd643b: 200-step smoke PASS on an EC2 p5.4xlarge 2026-09-21 (0.56 steps/s at batch 4, peak 74.2 GB; docs/RESULTS.md).
+deliverable: false
+lerobot_type: eo1
+precision: fp32_masters_bf16_autocast   # --policy.dtype=float32 keeps fp32 masters; bf16 autocast comes from amp_driver.py
+base_checkpoint: Qwen/Qwen2.5-VL-3B-Instruct   # the VLM init (policy.vlm_base); the flow head starts from scratch
+hub_artifacts:               # fetched by transformers from_pretrained at policy construction; a local dir works for vlm_base
+  - {repo: Qwen/Qwen2.5-VL-3B-Instruct, revision: 66285546d2b821cf421d4f5eb2576359d3770cd3, role: vlm backbone weights + Qwen2.5-VL processor/tokenizer, gated: false}   # pinned 2026-09-23 (HF API)  # pragma: allowlist secret
+requires_flat_action_names: false      # state/action are zero-padded to 32 dims; names are not parsed
+max_action_dim: 32                  # state and action are zero-padded to 32 dims inside the policy; wider datasets are refused
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+camera_mapping_required: false         # every VISUAL feature is rendered into the Qwen conversation under its own key
+smoke_candidate: false
+stub_reason: null            # promoted 2026-09-15: 0.55 steps/s at batch 4, 74 GB peak on an H100 (no headroom for batch 8); NEEDS an 80 GB GPU
+
+licence:
+  class: research_only       # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: null                 # the Qwen RESEARCH LICENSE AGREEMENT has no SPDX identifier
+  url: https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/blob/main/LICENSE
+  commercial_use: "no"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    The default lerobot eo1 recipe initialises its backbone from Qwen/Qwen2.5-VL-3B-Instruct, whose LICENSE is the
+    Qwen RESEARCH LICENSE AGREEMENT. Rights are granted "FOR NON-COMMERCIAL PURPOSES ONLY" and commercial use requires
+    a licence from Alibaba Cloud. Every fine-tune inherits that restriction. The upstream EO-1 code and the
+    IPEC-COMMUNITY/EO-1-3B card carry an MIT tag, but that checkpoint is built on the same Qwen backbone and lists
+    agibot-world/AgiBotWorld-Beta (CC BY-NC-SA 4.0) among its training data. This recipe does not use it.
+
+hardware:
+  vram_gb: 74                # MEASURED 2026-09-15 on an 80 GB H100 (batch 4, chunk 30): nvidia-smi peak 74.2 GB, torch 70.4 GB (docs/RESULTS.md, docs/TRAPS.md)
+  min_gpu_memory_gb: 80
+  checkpoint_gb: 44            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (MEASURED 2026-09-15: 15 GB weights + 29 GB optimizer state; Qwen2.5-VL-3B 7.1 GB staged)
+  hub_gb: 7.1                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.p5.4xlarge, ml.g7e.4xlarge, ml.p4de.24xlarge]
+  step_rate:
+    H100: 0.55             # measured 2026-09-15 on an 80 GB H100 with this recipe (release image, same container contract as the SageMaker job, run offline on EC2): 1.81 s/step at batch 4 (docs/RESULTS.md)
+
+defaults:
+  steps: 30000               # equals the config's scheduler_decay_steps default; argv pins decay to ${STEPS} anyway
+  batch_size: 4              # MEASURED 2026-09-15: 74 GB peak at batch 4 on an 80 GB H100 (docs/RESULTS.md), no headroom for 8; the lerobot doc uses 16 for a 300k-step run on larger hardware
+  chunk: 8                   # upstream default; project_config horizon_seconds derives it for the dataset frame rate
+  save_freq: 5000
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=eo1
+    - --policy.use_fast_processor=true       # required under amp_driver: the batch is on cuda when EO1QwenProcessorStep runs and transformers 5.5.4's PIL backend cannot take CUDA tensors (torchvision backend can)
+    - --policy.vlm_base=Qwen/Qwen2.5-VL-3B-Instruct   # __post_init__ fetches this Qwen config at PARSE time: isolated jobs must substitute the staged local dir before draccus runs
+    - --policy.dtype=float32                 # default "auto" resolves to bf16 weights = the AdamW-update-underflow trap
+    - --policy.attn_implementation=sdpa      # flash_attn is not in the image; sdpa is the portable backend the doc recommends
+    - --policy.gradient_checkpointing=true   # 36 Qwen layers at fp32: needed to keep activations inside 80 GB
+    - --policy.chunk_size=${CHUNK}
+    - --policy.n_action_steps=${CHUNK}
+    - --policy.scheduler_decay_steps=${STEPS}   # default 30000 would floor the LR at decay_lr=0 for the rest of a longer run
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: cosine_decay_with_warmup   # 'extend' must also pass the top-level --scheduler.num_decay_steps
+  forbidden_flags:
+    - --policy.dtype=bfloat16                # hard-casts the backbone; AdamW updates vanish below the bf16 ULP
+    - --policy.dtype=auto                    # same thing: "auto" is bf16 for Qwen2.5-VL
+    - --policy.dtype=float16
+    - --policy.attn_implementation=flash_attention_2   # flash_attn is not installed in the image
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC; PyAV is used
+
+eval:
+  policy_arg: eo1
+  n_samples: 4               # flow matching samples the chunk from noise (10 denoise steps): stochastic, average a few draws
+  history_frames: 1          # n_obs_steps=1, observation_delta_indices=None
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: dataset action space, zero-padded to 32 dims inside the model and cropped on output
+  control_rate: dataset fps
+  notes: >-
+    Language prompt is the dataset task string. The Qwen2.5-VL processor resizes images to 64-128 visual patches
+    (image_min_pixels/image_max_pixels), so no 360p copy is needed for correctness. Output chunk of n_action_steps
+    actions.

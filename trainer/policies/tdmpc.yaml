@@ -1,0 +1,105 @@
+# Registry entry: TD-MPC (Temporal Difference Model Predictive Control), lerobot 0.6.1 policy type "tdmpc".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: tdmpc
+display_name: TD-MPC (latent world model + CEM planning)
+tier: 0
+status: smoke-tested     # 200-step GPU smoke passed 2026-09-14 on lerobot/xarm_lift_medium @ 79efb0e3 (reward-labelled, one square 84x84 camera, 15 fps) (docs/RESULTS.md)
+deliverable: false           # licence-clean but not offerable on an imitation dataset: it needs a reward signal
+lerobot_type: tdmpc
+precision: fp32              # config has no dtype field; small networks, no autocast needed
+base_checkpoint: null        # trained from scratch; no torchvision backbone (own small CNN + MLP encoders)
+hub_artifacts: []            # nothing is downloaded at run time
+requires_flat_action_names: false
+requires_reward: true               # the loss reads batch["next.reward"]; imitation datasets have no reward feature
+square_images: true                 # random-shift augmentation needs a square camera image
+single_camera_required: true # validate_features: at most one image, and it must be square (random-shift augmentation)
+smoke_candidate: true        # 200 steps on ml.g6e.4xlarge, lerobot/xarm_lift_medium (reward-labelled, one square 84x84 camera): the only public v3.0 set that fits;
+                             # imitation datasets (lerobot-record output, svla_so101_pickplace) carry no reward, so the job cannot even load a batch
+stub_reason: null            # promoted 2026-09-14: smoke PASS at 2.94 steps/s on L40S, 100% tensors moved, reload ok (docs/RESULTS.md)
+
+licence:
+  class: clean               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0
+  url: https://github.com/huggingface/lerobot/blob/v0.6.1/LICENSE
+  commercial_use: "yes"
+  weights_fetched_by: none
+  gated: false
+  requires_accept: false
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    Trained from scratch with lerobot 0.6.1 (Apache-2.0). The lerobot LICENSE appends MIT notices for the upstream FOWM
+    (TD-MPC fine-tuning) and simxarm code this policy derives from. No pretrained weights of any kind are loaded.
+
+hardware:
+  vram_gb: 2                 # ESTIMATED, not measured: latent_dim 50, mlp_dim 512, 84x84 single camera, horizon 5 -- tiny
+  min_gpu_memory_gb: 16
+  checkpoint_gb: 0.1            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (MEASURED: 2.7M params)
+  hub_gb: 0                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6e.xlarge, ml.g6.4xlarge, ml.g5.4xlarge, ml.g5.2xlarge, ml.g4dn.2xlarge]
+  step_rate:
+    L40S: 2.94             # measured, 200-step smoke 2026-09-14 (registry smoke batch), lerobot/xarm_lift_medium @ 79efb0e3 (reward-labelled, one square 84x84 camera, 15 fps)
+
+defaults:                    # UNVERIFIED: no lerobot doc page in 0.6.1; values follow the xarm_lift_medium_replay defaults in the config
+  steps: 100000
+  batch_size: 256            # TD-MPC offline updates use large batches of short (horizon+1) sequences
+  chunk: 5                   # informational: horizon=5 planning steps, n_action_steps=1 executed; CHUNK is NOT rendered
+                             # (mapping a 24-step chunk onto horizon would load 25 frames per sample and change CEM entirely)
+  save_freq: 10000
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=tdmpc
+    - --tolerance_s=0.002                    # xarm_lift_medium is 15 fps: decoded pts differ from the parquet timestamps by ~1e-4, the default tolerance
+    - --policy.horizon=5                     # planning horizon; observation_delta_indices = range(horizon+1), reward = range(horizon)
+    - --policy.n_action_steps=1              # default; if > 1 then n_action_repeats must be 1 and use_mpc true (__post_init__)
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: none            # get_scheduler_preset() returns None: constant Adam lr 3e-4; 'extend' adds only --steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC (static Python); PyAV is used
+    - --policy.dtype=bfloat16                # no such field on TDMPCConfig
+    - --policy.dtype=float16
+    - --policy.n_obs_steps                   # anything but 1 raises "Multiple observation steps not handled yet"
+    - --policy.normalization_mapping         # ACTION must stay MIN_MAX; __post_init__ raises otherwise
+
+eval:
+  policy_arg: tdmpc
+  n_samples: 5               # stochastic: CEM planning draws n_gaussian_samples=512 action sequences per step
+  history_via_queues: true   # predict_action_chunk reads self._queues (modeling_tdmpc.py:108-133); the harness fills them
+  queue_image_key: observation.image   # TD-MPC queues the single image under observation.image, not observation.images
+  chunk_first: true          # predict_action_chunk returns (horizon, B, D)
+  tolerance_s: 0.002         # same reason for the eval harness and the reload check
+  no_history: true           # observation_delta_indices = range(horizon+1) are FUTURE consistency targets, not an observation history
+  history_frames: 1          # predict_action_chunk (modeling_tdmpc.py:108) returns (horizon, batch, action_dim), clamped to [-1, 1];
+                             # it reads the policy's internal queues, so the harness must go through select_action / populate_queues
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: actions in [-1, 1] (MIN_MAX), one square camera + state
+  control_rate: dataset fps, n_action_repeats=2 by default
+  notes: >-
+    Model-based reinforcement-learning policy. Each inference runs cem_iterations=6 rounds of CEM planning in latent
+    space, so it is not a drop-in for the ACT server.

@@ -1,0 +1,134 @@
+# Registry entry: FastWAM with LoRA on the video expert (Wan2.2-TI2V-5B video expert + action DiT, mixture-of-transformers), lerobot 0.6.1 policy type "fastwam".
+# Same base, same licence class and same hardware tier as fastwam.yaml. The difference is what trains: fastwam.yaml freezes the 5B video
+# expert and trains only the action expert, this entry adapts the video expert through LoRA (r 16) while the action expert and the proprio
+# encoder keep full training. The checkpoint it publishes is a PEFT adapter, not a full model.safetensors (see publish and serving below).
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: fastwam_lora
+display_name: FastWAM + LoRA on the video expert
+tier: 2
+status: smoke-tested     # the shipped default passed its 200-step smoke 2026-09-22 on an 80 GB H100 (EC2 host, SageMaker container contract); a 60k x 1 run reached 1.26 x hold (20k x 1: 2.01 x), so the entry stays smoke-tested (docs/RESULTS.md)
+deliverable: false
+lerobot_type: fastwam
+precision: fp32_masters_bf16_autocast   # config default torch_dtype=bfloat16 hard-casts both DiT experts; fp32 masters + amp_driver.py autocast
+base_checkpoint: lerobot/fastwam_base   # the PEFT base for eval and reload (train_policy.sh passes it as --peft-base); the adapter also carries full copies of the action expert and proprio encoder, so merging onto this base reproduces the trained weights
+hub_artifacts:               # frozen Wan pieces are excluded from model.safetensors and fetched by name at __init__ (wan/components.py:115,132; :83)
+  - {repo: lerobot/fastwam_base, revision: 0a868ec1dcf6ff00bcdfa9b7196d6e211ed7e616, role: base_checkpoint, gated: false}   # pinned 2026-09-23 (HF API)  # pragma: allowlist secret
+  - {repo: Wan-AI/Wan2.2-TI2V-5B-Diffusers, revision: b8fff7315c768468a5333511427288870b2e9635, role: frozen_vae_and_umt5_text_encoder, gated: false}   # pinned 2026-09-23 (HF API); repo id hard-coded for the VAE  # pragma: allowlist secret
+  - {repo: google/umt5-xxl, revision: 66cb9e7e85526fe440a945569e42c72fb6cbc0ad, role: tokenizer, gated: false}   # pinned 2026-09-23 (HF API)  # pragma: allowlist secret
+requires_flat_action_names: false
+camera_count_divides: 448           # set_dataset_feature_metadata gives each camera 448 // n px and validate_features requires the widths to sum to 448: 1, 2, 4, 7, 8 cameras work, 3 do not (use policies.fastwam_lora.cameras)
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+camera_mapping_required: false  # set_dataset_feature_metadata rebuilds the visual features from the dataset keys (sorted; width 448 split across cameras)
+smoke_candidate: false
+stub_reason: null            # promoted 2026-09-18: 0.95 steps/s at batch 1, 78.8 GB peak, 4.2 GB adapter per checkpoint (measured, see hardware); NEEDS an 80 GB GPU
+
+licence:
+  class: unknown             # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0           # HF tags: lerobot/fastwam_base, Wan-AI/Wan2.2-TI2V-5B(-Diffusers), google/umt5-xxl all apache-2.0; corpus terms not verified
+  url: https://huggingface.co/lerobot/fastwam_base
+  commercial_use: "unknown"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: true    # unknown corpus: record who read the instrument before any job is submitted
+  verified_on: "2026-09-10"
+  notice: >-
+    lerobot/fastwam_base, and the frozen Wan2.2-TI2V-5B VAE, UMT5-XXL encoder and tokenizer it pulls at run time, are
+    all tagged apache-2.0 on the Hub. No licence text and no statement about the robot training data were found for
+    the base checkpoint, so nobody has been able to check the publisher's terms. Treat the licence as unresolved and
+    check it yourself before relying on a fine-tune of this base.
+
+hardware:
+  vram_gb: 79                # MEASURED 2026-09-18 on an 80 GB H100 (batch 1, chunk 32, gradient checkpointing on): nvidia-smi peak 78.8 GB. Backprop runs through the 5B video expert, so this sits 6 GB above fastwam.yaml
+  min_gpu_memory_gb: 80
+  checkpoint_gb: 13           # weights + optimizer state per checkpoint: adapter_model.safetensors MEASURED 2026-09-18 at 4.18 GB (LoRA tensors plus the full fp32 copies of the action expert and proprio encoder, no model.safetensors) + training_state (two AdamW moments of the same trainable set, about 8.4 GB, estimated). Unlike fastwam.yaml (31) the frozen video expert is not saved
+  hub_gb: 70                 # 46 GB staged hub channel (same artefacts as fastwam.yaml, staged again under this recipe's own prefix) + 24 GB for the merged fp32 copy publish.py writes once into /opt/ml/model (publish.merge_adapter below); sm_jobs.volume_gb has no separate field for the merge
+  instance_types: [ml.p5.4xlarge, ml.p4de.24xlarge, ml.p5.48xlarge]
+  step_rate:
+    H100: 0.95             # measured 2026-09-18 on an 80 GB H100 (EC2 host, same container contract as the SageMaker job, run offline): 1.00-1.07 s/step at batch 1, about half the rate of the frozen-video-expert recipe (0.44 s/step)
+
+defaults:
+  steps: 20000               # completes the pipeline in ~5 h on ml.p5.4xlarge but under-trains on so101-4tasks-100eps (2.01 x hold; 60k steps reached 1.26 x hold, docs/RESULTS.md); raise for a real fine-tune
+  batch_size: 1              # 9 video frames (33-frame window, stride 4) per camera through the VAE per sample; batch 1 already peaks at 78.8 GB
+  chunk: 32                  # action_horizon; must be a multiple of the 8 video transitions ((33-1)/4) -> 32 is the only default-compatible value
+  save_freq: 5000
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=fastwam                            # base weights load via base_model_id auto-path; shape-mismatched action/proprio tensors are re-initialised (modeling_fastwam.py:92-134)
+    - --policy.torch_dtype=float32                     # fp32 masters; fp32_attention=true is already the default
+    - --policy.freeze_video_expert=false               # the video expert must be trainable for PEFT to wrap it; PEFT then freezes every weight that is not an adapter or a full_training_modules entry
+    - --policy.use_gradient_checkpointing=true         # backprop now runs through the 5B video DiT: activations are recomputed to stay under 80 GB (78.8 GB peak at batch 1 with this on)
+    - --peft.method_type=lora                          # LoRA adapters on the video expert; the checkpoint becomes adapter_model.safetensors + adapter_config.json
+    - --peft.r=16                                      # adapter rank
+    - --peft.lora_alpha=32                             # adapter scale (alpha / r = 2)
+    - --peft.target_modules=.*\.blocks\.video\..*\.(q|k|v|o)   # regex, PEFT does re.fullmatch on module names: the attention projections of the VIDEO expert blocks (model.mot.layers.N.blocks.video.self_attn.{q,k,v,o}); the action blocks are ...blocks.action... and model.mot.mixtures.{video,action} hold only embeddings and heads, so a mixtures.video pattern matches nothing (PEFT: 'No modules were targeted for adaptation')
+    - --peft.full_training_modules=["mixtures.action.action_encoder","mixtures.action.head","mixtures.action.time_embedding","mixtures.action.text_embedding","mixtures.action.time_projection","blocks.action","proprio_encoder"]   # lerobot maps this to PEFT modules_to_save (suffix match on module names). LEAF modules of the action expert on purpose: wrapping the whole expert ("action" = mot.mixtures.action) puts the trainable copy into the registered tree only, while FastWAM's forward reaches the expert through the unregistered alias self.action_expert, so the action encoder and head were never trained (their weights stayed at the default init on the 2026-09-21 20k run) and eval/reload used random ones. The action DiT blocks are wrapped per layer (blocks.action = mot.layers.N.blocks.action, which the forward does use).
+    - --policy.loss={"lambda_video":1.0,"lambda_action":1.0}   # video loss back on: the adapted video expert learns this scene (fastwam.yaml sets lambda_video 0 because its video expert is frozen)
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+    - when: ACTION_DIM                                  # validate_features requires action_dim == dataset action width (default 7, LIBERO)
+      arg: "--policy.action_dim=${ACTION_DIM}"
+      after: "--policy.type"
+    - when: STATE_DIM                                   # proprio_dim must equal observation.state width (default 8, LIBERO)
+      arg: "--policy.proprio_dim=${STATE_DIM}"
+      after: "--policy.type"
+  scheduler: none            # get_scheduler_preset returns None: constant LR 1e-4, 'extend' adds only --steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec
+    - --policy.torch_dtype=bfloat16          # hard-casts weights; AdamW updates vanish below the bf16 ULP (see docs/TRAPS.md)
+    - --policy.torch_dtype=float16
+    - --policy.model_id                      # only Wan-AI/Wan2.2-TI2V-5B or a local path is accepted (configuration_fastwam.py:129-132)
+    - --rename_map
+  # Advanced flow, continuing from your own full FastWAM fine-tune instead of the published base: stage that checkpoint into the hub
+  # channel and set policies.fastwam_lora.overrides to --policy.pretrained_path=/opt/ml/input/data/hub/<dir>/pretrained_model. The
+  # 2026-09-18 runs trained this way at lr 1e-4. Eval and reload still merge onto lerobot/fastwam_base (base_checkpoint above), which
+  # is exact when the earlier fine-tune kept the video expert frozen (fastwam.yaml): its video expert equals the base and everything
+  # else it changed travels inside the adapter file.
+
+eval:
+  policy_arg: fastwam
+  n_samples: 1               # one draw per frame; inference_seed=42 fixes the flow-matching noise. The 2026-09-21 reload spread (56-251) was the
+                             # untrained action encoder/head reached through FastWAM's alias, not sampling: fixed 2026-09-22, reload diff 0.0
+  history_frames: 1          # inference consumes the current frame per camera; the 9-frame window (range(0,33,4)) is a training target only
+  no_history: true           # inference takes the current frame only: proprio must be [D] or [1, D], not the 9-frame training window (H100 run 2026-09-15)
+
+smoke:
+  steps: 200
+  checks_device: cpu         # rebuilding the fp32 6B policy on the GPU after training OOMs an 80 GB card (frozen Wan expert + VAE + UMT5); smoke_checks reads the adapter file (lora_B tensors moved) without a GPU
+  max_minutes: 150
+  log_freq: 50
+
+publish:
+  merge_adapter: true        # also publish the adapter merged into full weights (model.safetensors + config.json + processor files) next to the adapter checkpoint, so a server loads it like the plain fastwam checkpoint. The merged config must carry device set to the serving device (not the cpu the merge ran on), use_gradient_checkpointing false, use_peft false and pretrained_path null, or a cuda server fails with tensors on two devices (docs/TRAPS.md)
+
+serving:
+  frames_per_camera: 1
+  action_space: dataset action space (ACTION MEAN_STD), action_horizon 32 at dataset fps
+  control_rate: dataset fps
+  notes: >-
+    Language-conditioned through the UMT5 prompt_template. Cameras are resized to 224 x (448 / n_cameras) inside the
+    model. predict_action_chunk returns 32 steps. The published pretrained_model is a PEFT adapter (adapter_model.safetensors,
+    adapter_config.json, processor files, no model.safetensors) unless publish.merge_adapter is on. An adapter needs the base
+    (lerobot/fastwam_base) at load time, the way eval_openloop.py merges it with --peft-base. The merged copy loads with
+    FastWAMPolicy.from_pretrained like the plain fastwam checkpoint and needs no peft at serving time.
+    Pass the base explicitly when loading an adapter (or serve the merged copy): adapter_config.json records
+    base_model_name_or_path as the container path the job saw, not a Hub id.

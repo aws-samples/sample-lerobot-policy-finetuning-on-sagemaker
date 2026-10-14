@@ -1,0 +1,102 @@
+# Registry entry: VQ-BeT (Vector-Quantized Behavior Transformer), lerobot 0.6.1 policy type "vqbet".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: vqbet
+display_name: VQ-BeT (Vector-Quantized Behavior Transformer)
+tier: 0
+status: smoke-tested     # 200-step GPU smoke on the public dataset (one-camera view) passed 2026-09-11 (docs/RESULTS.md)
+deliverable: true
+lerobot_type: vqbet
+precision: fp32              # upstream trains fp32; the config has no dtype field
+base_checkpoint: null        # trained from scratch; lerobot/vqbet_pusht (2-dim PushT) is a demo, never a fine-tune start
+hub_artifacts: []            # nothing is downloaded at run time (torchvision ResNet18 IMAGENET1K_V1 is pre-staged in the image)
+requires_flat_action_names: false
+single_camera_required: true # validate_features raises "You must provide only one image among the inputs." (configuration_vqbet.py)
+smoke_candidate: true        # 200 steps on ml.g6e.4xlarge, public dataset (camera observation.images.side): PASSED 2026-09-11 (5.40 steps/s)
+stub_reason: null            # promoted 2026-09-11: smoke passed on the one-camera view with the smoke-only n_vqvae_training_steps=100 (docs/RESULTS.md)
+
+licence:
+  class: clean               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0
+  url: https://github.com/huggingface/lerobot/blob/v0.6.1/LICENSE
+  commercial_use: "yes"
+  weights_fetched_by: none
+  gated: false
+  requires_accept: false
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    Trained from scratch on your dataset with lerobot 0.6.1 (Apache-2.0). Upstream code: VQ-BeT MIT (Seungjae Lee,
+    2024), the vendored vector-quantize-pytorch MIT (lucidrains), and a GPT block after nanoGPT MIT (Andrej Karpathy).
+    The only inherited weights are torchvision's ResNet18 ImageNet-1k initialisation (BSD-3-Clause code).
+
+hardware:
+  vram_gb: 11                # ESTIMATED, not measured: 39.5 M params, n_obs_steps(5) frames of one camera per sample at batch 16, 360x640
+  min_gpu_memory_gb: 16
+  checkpoint_gb: 0.5            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (ESTIMATE: 40M params fp32 + Adam)
+  hub_gb: 0                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6e.xlarge, ml.g6.4xlarge, ml.g5.4xlarge, ml.g5.2xlarge, ml.g4dn.2xlarge]
+  step_rate:
+    L40S: 5.40             # measured, 200-step smoke, batch 16, one 480x360 camera, n_obs_steps 5 (5 video decodes per sample)
+
+defaults:                    # adapted from the PushT card (batch 64, 250k steps); UNVERIFIED on a real-robot dataset
+  steps: 100000              # must be >> n_vqvae_training_steps (20000): the first 20k steps train only the Residual VQ
+  batch_size: 16
+  chunk: 5                   # informational: action_chunk_size=5 (executed per inference) x n_action_pred_token=3 are the
+                             # tuned VQ-BeT defaults; CHUNK is deliberately NOT rendered (a 24-step chunk would resize the
+                             # VQ-VAE codebook input and is outside anything the paper trained)
+  save_freq: 10000
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=vqbet
+    - --policy.crop_shape=null               # default (84, 84) is a PushT constant: on 360x640 it silently trains on an 84x84 patch.
+                                             # 'null' parses to None in draccus ('None' does not); there is no resize in VQ-BeT
+    - --policy.n_vqvae_training_steps=20000  # explicit so the two-phase schedule is visible in train_config.json
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  # Preset is VQBeTSchedulerConfig(num_warmup_steps=500, num_vqvae_training_steps=20000): cosine over --steps after the VQ
+  # phase, NO num_decay_steps field, so 'extend' must add only --steps. 'none' encodes that for render_flags.py.
+  scheduler: none
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC (static Python); PyAV is used
+    - --policy.dtype=bfloat16                # no such field on VQBeTConfig
+    - --policy.dtype=float16
+
+eval:
+  policy_arg: vqbet
+  n_samples: 5               # stochastic: codes are drawn with torch.multinomial at bet_softmax_temperature=0.1
+  history_frames: 5          # predict_action_chunk (modeling_vqbet.py:120) stacks n_obs_steps frames from its queues
+  history_via_queues: true   # so the harness feeds the history through populate_queues (eval_openloop.predict_chunk)
+  # A checkpoint saved before step 20000 is not a policy: the Residual VQ is not yet frozen ("discretized" is false) and
+  # select_action warns. The 200-step smoke therefore only proves the pipeline, not the model.
+
+smoke:
+  steps: 200
+  log_freq: 50
+  argv:                      # smoke-only: the Residual VQ trains alone for n_vqvae_training_steps (default 20000) and the
+    - --policy.n_vqvae_training_steps=100   # transformer only afterwards; 100 + 100 steps exercise both phases and freeze the RVQ (discretized)
+
+serving:
+  frames_per_camera: 5
+  action_space: absolute joint positions (MIN_MAX normalised internally)
+  control_rate: dataset fps
+  notes: >-
+    No language input. One camera only. 5 stacked observations in, action_chunk_size=5 actions out per inference.

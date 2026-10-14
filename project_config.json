@@ -1,0 +1,283 @@
+{
+  "_comment": "The only file you edit. Pick the dataset folder under datasets/, enable the policies you want, set compute. Registry facts per policy (training flags, tier, VRAM, licence class) live in trainer/policies/*.yaml and are maintained with the repo, not here. CLI flags of ./finetune.sh override anything below for one run.",
+  "project": "lerobot-finetune",
+  "secrets": {
+    "_comment": "Name of an AWS Secrets Manager secret holding a Hugging Face token; null = <project>/hf_token. Needed only for gated base weights (pi0 / pi0.5 / pi0_fast PaliGemma tokenizer, GR00T Cosmos-Reason2 processor). finetune.sh prompts for the token (hidden input, validated against the Hub) before the first staging job that needs it and stores it; cdk deploy -c hfTokenPrompt=true stores it at deploy time instead (off by default); only the base-weight staging job reads it, never a training job (network isolation on).",
+    "hf_token": null
+  },
+  "dataset": {
+    "_comment": "source=local reads datasets/<name>/ (the hard requirement: a LeRobot v3.0 dataset folder). source=huggingface downloads hf_repo_id@hf_revision into datasets/<name>/ first (the shipped default is a small public SO-101 pick-and-place set, Apache-2.0). source=s3 points at a dataset already staged in your own bucket. Videos taller than downscale_height are downscaled inside the job; null keeps the source resolution.",
+    "name": "svla_so101_pickplace",
+    "source": "huggingface",
+    "hf_repo_id": "lerobot/svla_so101_pickplace",
+    "hf_revision": "v3.0",
+    "s3_uri": null,
+    "downscale_height": 360
+  },
+  "evaluation": {
+    "_comment": "heldout='auto' holds out ~10% of episodes, evenly spaced; or give explicit episode ids. stride 1 scores every held-out frame (slow but what the reference numbers used).",
+    "heldout": "auto",
+    "stride": 1,
+    "checkpoints": [
+      "last"
+    ]
+  },
+  "compute": {
+    "_comment": "One single-GPU instance per training job; bigger multi-GPU boxes do not speed this trainer up. ml.g6e.4xlarge (L40S 48 GB) is the validated default; ml.g5.4xlarge and ml.g4dn.2xlarge work for ACT at 1/2 and 1/6 of the speed. Quotas default to 0 in new accounts — see README 'Quotas'. spot=true uses managed Spot with checkpoint resume. volume_gb null = derived from the dataset size. keep_checkpoints = newest complete checkpoints kept during and after training (0 = all; lerobot never deletes any and a pi0-class checkpoint is about 19 GB).",
+    "instance_type": "ml.g6e.4xlarge",
+    "spot": false,
+    "fallback_instance_types": [],
+    "volume_gb": null,
+    "runtime_multiplier": 3.0,
+    "keep_checkpoints": 3
+  },
+  "smoke": {
+    "_comment": "Before every training job a 200-step job on the same instance proves the image, dataset and flags (< $1). reuse=true skips it when an identical smoke already passed.",
+    "enabled": true,
+    "steps": 200,
+    "reuse": true
+  },
+  "policies": {
+    "_comment": "All 16 policy types this asset offers (plus `fastwam_lora`, a second recipe for `fastwam`), each with the public dataset it was validated, trained or smoke-tested on (docs/DATASETS.md), its instance type and licence switches. Flip `enabled` (or pass --policy <name>) to train one; ./finetune.sh --plan shows the plan and cost first. Policies without a `dataset` block use the shared block above. Statuses and licences: docs/POLICIES.md.",
+    "act": {
+      "enabled": true,
+      "steps": 100000,
+      "batch_size": 8,
+      "horizon_seconds": 1.0,
+      "chunk": null,
+      "save_freq": 5000,
+      "seed": 1000,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "validated: reproduces the reference numbers on the shared dataset (100k steps, ~$10 on ml.g6e.4xlarge)"
+    },
+    "diffusion": {
+      "enabled": false,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "smoke-tested on the shared dataset (VISUAL is MEAN_STD: needs sane image statistics, which the 4-task set lacks)"
+    },
+    "vqbet": {
+      "enabled": false,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "smoke-tested; trains on one camera (set `camera` to choose, default the first)"
+    },
+    "tdmpc": {
+      "enabled": false,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "RL/reward-labelled data only; smoke-tested on lerobot/xarm_lift_medium (MIT)",
+      "dataset": {
+        "name": "xarm_lift_medium",
+        "source": "huggingface",
+        "hf_repo_id": "lerobot/xarm_lift_medium",
+        "hf_revision": "79efb0e3cef0e530ddec4b8569b190966ab45808",
+        "downscale_height": null
+      }
+    },
+    "multi_task_dit": {
+      "enabled": false,
+      "batch_size": 8,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "licence class unknown (CLIP encoder): set accept_licence; smoke-tested on the shared dataset"
+    },
+    "smolvla": {
+      "enabled": false,
+      "steps": 20000,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "trained 20k steps on the shared dataset (0.376 x hold)"
+    },
+    "xvla": {
+      "enabled": false,
+      "steps": 30000,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "terms: set accept_licence; trained 30k steps on the shared dataset (0.463 x hold)"
+    },
+    "pi0": {
+      "enabled": false,
+      "steps": 20000,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "terms + gated PaliGemma tokenizer (Hugging Face token prompt); trained 20k steps (0.372 x hold)"
+    },
+    "pi05": {
+      "enabled": false,
+      "steps": 20000,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "terms + gated tokenizer; QUANTILES stats completed in-job; trained 20k steps (0.350 x hold)"
+    },
+    "evo1": {
+      "enabled": false,
+      "batch_size": 8,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "licence class unknown (InternVL3): set accept_licence; smoke-tested on the 4-task set",
+      "dataset": {
+        "name": "so101-4tasks-100eps",
+        "source": "huggingface",
+        "hf_repo_id": "hjkso1406/so101-4tasks-100eps",
+        "hf_revision": "52df842eec7e9425a87040528f94ab20732e42fb",
+        "downscale_height": 360
+      }
+    },
+    "molmoact2": {
+      "enabled": false,
+      "batch_size": 8,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "research-only: set accept_licence + approval_ref; 21.8 GB base staged; smoke-tested on the 4-task set",
+      "dataset": {
+        "name": "so101-4tasks-100eps",
+        "source": "huggingface",
+        "hf_repo_id": "hjkso1406/so101-4tasks-100eps",
+        "hf_revision": "52df842eec7e9425a87040528f94ab20732e42fb",
+        "downscale_height": 360
+      }
+    },
+    "groot": {
+      "enabled": false,
+      "batch_size": 8,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "NVIDIA Open Model License: accept_licence + approval_ref, token account must accept nvidia/Cosmos-Reason2-2B; smoke-tested on the shared dataset (48 GB sufficed)"
+    },
+    "lingbot_va": {
+      "enabled": false,
+      "batch_size": 1,
+      "overrides": [],
+      "instance_type": null,
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "LoRA r16 (5 B params); accept_licence + approval_ref; smoke-tested on the 4-task set, slow (UMT5 prompt encoder on CPU)",
+      "dataset": {
+        "name": "so101-4tasks-100eps",
+        "source": "huggingface",
+        "hf_repo_id": "hjkso1406/so101-4tasks-100eps",
+        "hf_revision": "52df842eec7e9425a87040528f94ab20732e42fb",
+        "downscale_height": 360
+      }
+    },
+    "pi0_fast": {
+      "enabled": false,
+      "batch_size": 4,
+      "horizon_seconds": 0.34,
+      "overrides": [],
+      "instance_type": "ml.p5.4xlarge",
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "needs an 80 GB GPU (68 GB peak); terms + gated tokenizer; smoke-tested on H100",
+      "dataset": {
+        "name": "so101-4tasks-100eps",
+        "source": "huggingface",
+        "hf_repo_id": "hjkso1406/so101-4tasks-100eps",
+        "hf_revision": "52df842eec7e9425a87040528f94ab20732e42fb",
+        "downscale_height": 360
+      }
+    },
+    "eo1": {
+      "enabled": false,
+      "batch_size": 4,
+      "overrides": [],
+      "instance_type": "ml.p5.4xlarge",
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "needs an 80 GB GPU (74 GB peak); research-only: accept_licence + approval_ref; smoke-tested on H100",
+      "dataset": {
+        "name": "so101-4tasks-100eps",
+        "source": "huggingface",
+        "hf_repo_id": "hjkso1406/so101-4tasks-100eps",
+        "hf_revision": "52df842eec7e9425a87040528f94ab20732e42fb",
+        "downscale_height": 360
+      }
+    },
+    "fastwam": {
+      "enabled": false,
+      "batch_size": 1,
+      "overrides": [],
+      "instance_type": "ml.p5.4xlarge",
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "needs an 80 GB GPU (73 GB peak) and ~230 GB of job volume (31 GB checkpoints, 46 GB staged weights); licence unknown + approval_ref; smoke-tested on H100",
+      "dataset": {
+        "name": "so101-4tasks-100eps",
+        "source": "huggingface",
+        "hf_repo_id": "hjkso1406/so101-4tasks-100eps",
+        "hf_revision": "52df842eec7e9425a87040528f94ab20732e42fb",
+        "downscale_height": 360
+      }
+    },
+    "fastwam_lora": {
+      "enabled": false,
+      "batch_size": 1,
+      "overrides": [],
+      "instance_type": "ml.p5.4xlarge",
+      "spot": null,
+      "accept_licence": false,
+      "approval_ref": null,
+      "notes": "second recipe for fastwam: LoRA on the video expert, action expert in full training; needs an 80 GB GPU (78.8 GB peak) and ~330 GB of job volume (13 GB checkpoints, 46 GB staged weights, 24 GB merged copy); publishes a 4 GB adapter plus the merged full checkpoint; licence unknown + approval_ref; smoke-tested on H100",
+      "dataset": {
+        "name": "so101-4tasks-100eps",
+        "source": "huggingface",
+        "hf_repo_id": "hjkso1406/so101-4tasks-100eps",
+        "hf_revision": "52df842eec7e9425a87040528f94ab20732e42fb",
+        "downscale_height": 360
+      }
+    }
+  },
+  "extra_job_tags": {},
+  "image": {
+    "_comment": "ECR tag the deploy-time CodeBuild image build pushes. Read by cdk/app.py; training jobs pin the image by digest (SSM /<project>/image_uri), never by tag.",
+    "tag": "v1"
+  },
+  "solution": {
+    "_comment": "AWS Solution identity — the single source of truth for both reporting mechanisms: the CloudFormation stack Description (deployment counting) and the AWS SDK User-Agent suffix (API usage attribution). Not a per-run knob: bump 'version' when cutting a release and otherwise leave it alone. pipeline/solution.py is the only reader and always reads THIS file, not the --config override, so a per-run config cannot strip the identity. See pipeline/solution.py for the exact formats and README 'Anonymous usage metrics' for what is and is not reported.",
+    "id": "SO0371",
+    "name": "Fine-tune LeRobot policies on Amazon SageMaker",
+    "version": "v1.0.0"
+  }
+}

@@ -1,0 +1,102 @@
+# Registry entry: Multi-Task Diffusion Transformer (DiT denoiser conditioned on CLIP ViT-B/16 vision + frozen CLIP text), lerobot 0.6.1 policy type "multi_task_dit".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: multi_task_dit
+display_name: Multi-Task DiT (diffusion transformer with CLIP conditioning)
+tier: 1
+status: smoke-tested     # 200-step GPU smoke passed 2026-09-14 on lerobot/svla_so101_pickplace (sane image stats: VISUAL is MEAN_STD) (docs/RESULTS.md)
+deliverable: false
+lerobot_type: multi_task_dit
+precision: fp32              # no dtype field; --policy.use_amp=true (optional) gives fp32 params + autocast through lerobot-train itself
+base_checkpoint: null        # the DiT and encoders' projections train from scratch; only the CLIP encoders below are pretrained weights
+hub_artifacts:               # staged by the hub job; resolved from the pre-populated HF cache (HF_HUB_OFFLINE=1)
+  - {repo: openai/clip-vit-base-patch16, revision: 57c216476eefef5ab752ec549e440a49ae4ae5f3, role: vision_encoder_text_encoder_tokenizer, gated: false}  # CLIPVisionModel (trained at 0.1x LR) + CLIPTextModel (frozen) + tokenizer, fetched at policy construction  # pragma: allowlist secret
+requires_flat_action_names: false
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+camera_mapping_required: false      # any number of cameras, but all must share (C,H,W) (validate_features raises otherwise)
+smoke_candidate: true        # 200 steps on ml.g6e.4xlarge, lerobot/svla_so101_pickplace (VISUAL is MEAN_STD: needs sane image stats, which the 4-task set lacks)
+stub_reason: null            # promoted 2026-09-14: smoke PASS at 7.14 steps/s on L40S, 99% tensors moved, reload ok (docs/RESULTS.md)
+
+licence:
+  class: unknown             # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: null
+  url: https://huggingface.co/openai/clip-vit-base-patch16
+  commercial_use: "unknown"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    The policy is trained from scratch under lerobot 0.6.1 (Apache-2.0; upstream author Bryson Jones, 2025). At
+    construction it downloads openai/clip-vit-base-patch16: the vision encoder (fine-tuned at 0.1x the learning rate,
+    so its weights end up in your checkpoint), the frozen text encoder and the tokenizer. That Hub repo declares no
+    licence (verified 2026-09-10). The OpenAI CLIP code repository is MIT
+    (https://github.com/openai/CLIP/blob/main/LICENSE) but says nothing about the weights. The class stays unknown
+    until OpenAI's terms for the weights are established.
+
+hardware:
+  vram_gb: 12                # ESTIMATE, unmeasured: ViT-B/16 (86M) per frame x n_obs_steps=2 x cameras at batch 8, DiT 6x512; the matrix places it in the 24 GB class
+  min_gpu_memory_gb: 24
+  checkpoint_gb: 2.4            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (MEASURED 2026-09-14: 995 MB weights + 1.4 GB Adam state; CLIP 0.6 GB staged)
+  hub_gb: 0.6                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6.4xlarge, ml.g5.4xlarge, ml.g5.2xlarge]
+  step_rate:
+    L40S: 7.14             # measured, 200-step smoke 2026-09-14 (registry smoke batch), lerobot/svla_so101_pickplace (sane image stats: VISUAL is MEAN_STD)
+
+defaults:
+  steps: 100000
+  batch_size: 8
+  chunk: 24                  # n_action_steps; lerobot default is 24 with horizon 32 (see the constraint on the flag below)
+  save_freq: 10000
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=multi_task_dit
+    - --policy.n_action_steps=${CHUNK}        # horizon stays at the default 32 (predicted), so CHUNK <= horizon - n_obs_steps + 1 = 31 or actions[:, 1:1+CHUNK] is silently truncated
+    - --policy.do_mask_loss_for_padding=true # default false trains on copy-padded episode tails (same fix as diffusion)
+    - --policy.image_resize_shape=[224,224]   # CLIP needs 224x224; without a resize the default crop takes a 224x224 PATCH of the frame (16% of a 480x640 image). Aspect is squashed; the crop becomes an identity
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: none            # preset is DiffuserSchedulerConfig(cosine, warmup 0): length derived from --steps at every launch, no num_decay_steps field, so 'extend' adds only --steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC; PyAV is used
+    - --policy.dtype                         # not a MultiTaskDiTConfig field (draccus rejects it); use --policy.use_amp=true for autocast
+    - --policy.vision_encoder_name           # any other CLIP checkpoint invalidates the licence entry above
+    - --policy.text_encoder_name
+
+eval:
+  policy_arg: multi_task_dit
+  n_samples: 4               # DDPM sampling (100 steps by default) is stochastic
+  history_via_queues: true   # predict_action_chunk stacks self._queues (modeling_multi_task_dit.py:153-163); language tokens pass through
+  history_frames: 2          # n_obs_steps=2: predict_action_chunk stacks the observation queues, so the caller must feed two frames (populate_queues / select_action path)
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 2
+  action_space: absolute joint positions (MIN_MAX-normalised; clip_sample keeps denoising inside [-1, 1])
+  control_rate: dataset fps
+  notes: >-
+    Language prompt from the dataset task string, tokenised with the CLIP tokenizer (77 tokens, frozen text encoder
+    plus a learned projection). Inference runs 100 DDPM steps by default. Set num_inference_steps or DDIM for
+    real-time control.

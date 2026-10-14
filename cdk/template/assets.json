@@ -1,0 +1,53 @@
+{
+  "_comment": "Written by cdk/export_template.py; do not edit. Upload each asset, zipped as described, to s3://<AssetsBucketName>/<s3_key> before deploying the template. Keys are content hashes taken at export time: the S3 key must match, the zip content need not (see cdk/template/README.md).",
+  "assets": [
+    {
+      "bucket": "${AssetsBucketName}",
+      "display_name": "TrainerBuildContext",
+      "excluded_from_zip": [
+        "policies/README.md"
+      ],
+      "id": "3db284a4ae8822607b0d09da0c19b27539863eda06bca40d5676d6f84d274e06",
+      "packaging": "zip",
+      "path": "trainer/",
+      "referenced_in_template": true,
+      "s3_key": "3db284a4ae8822607b0d09da0c19b27539863eda06bca40d5676d6f84d274e06.zip",
+      "zip_layout": "contents of trainer/ at the zip root (no top-level folder)"
+    },
+    {
+      "bucket": "${AssetsBucketName}",
+      "display_name": "AWS679f53fac002430cb0da5b7982bd2287/Code",
+      "files": [
+        "index.js"
+      ],
+      "generated_by": "aws-cdk-lib 2.268.0 (Apache-2.0)",
+      "id": "9b8fce7ae7f25ef82fdbaf6b72523b99d0875c0c9c826642819fb51f11d9b125",
+      "packaging": "zip",
+      "path": "cdk/template/assets/kickoff-handler/",
+      "referenced_in_template": true,
+      "s3_key": "9b8fce7ae7f25ef82fdbaf6b72523b99d0875c0c9c826642819fb51f11d9b125.zip",
+      "zip_layout": "contents of cdk/template/assets/kickoff-handler/ at the zip root (no top-level folder)"
+    },
+    {
+      "bucket": "${AssetsBucketName}",
+      "display_name": "lerobot-finetune-infra/Custom::S3AutoDeleteObjectsCustomResourceProvider Code",
+      "files": [
+        "index.js"
+      ],
+      "generated_by": "aws-cdk-lib 2.268.0 (Apache-2.0)",
+      "id": "faa95a81ae7d7373f3e1f242268f904eb748d8d0fdd306e8a6fe515a1905a7d6",
+      "packaging": "zip",
+      "path": "cdk/template/assets/s3-auto-delete-handler/",
+      "referenced_in_template": true,
+      "s3_key": "faa95a81ae7d7373f3e1f242268f904eb748d8d0fdd306e8a6fe515a1905a7d6.zip",
+      "zip_layout": "contents of cdk/template/assets/s3-auto-delete-handler/ at the zip root (no top-level folder)"
+    }
+  ],
+  "generated_with": {
+    "aws_cdk_lib": "2.268.0",
+    "cdk_nag": "2.38.2",
+    "cloud_assembly_schema": "54.0.0"
+  },
+  "template": "cdk/template/lerobot-finetune-infra.template.json",
+  "template_parameter": "AssetsBucketName"
+}

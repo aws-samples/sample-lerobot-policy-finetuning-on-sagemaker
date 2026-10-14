@@ -1,0 +1,1776 @@
+{
+  "Description": "(SO0371) - Fine-tune LeRobot policies on Amazon SageMaker. Version v1.0.0",
+  "Outputs": {
+    "Account": {
+      "Value": {
+        "Ref": "AWS::AccountId"
+      }
+    },
+    "BucketName": {
+      "Value": {
+        "Ref": "AssetsBucket5CB76180"
+      }
+    },
+    "EcrRepoUri": {
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            {
+              "Fn::Select": [
+                4,
+                {
+                  "Fn::Split": [
+                    ":",
+                    {
+                      "Fn::GetAtt": [
+                        "TrainingImageRepoC02A32E1",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            ".dkr.ecr.",
+            {
+              "Fn::Select": [
+                3,
+                {
+                  "Fn::Split": [
+                    ":",
+                    {
+                      "Fn::GetAtt": [
+                        "TrainingImageRepoC02A32E1",
+                        "Arn"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            ".",
+            {
+              "Ref": "AWS::URLSuffix"
+            },
+            "/",
+            {
+              "Ref": "TrainingImageRepoC02A32E1"
+            }
+          ]
+        ]
+      }
+    },
+    "ImageBuildProject": {
+      "Value": {
+        "Ref": "ImageFactory6FAF51D8"
+      }
+    },
+    "KickoffBuildId": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ImageBuildKickoffC832D100",
+          "build.id"
+        ]
+      }
+    },
+    "Project": {
+      "Value": "lerobot-finetune"
+    },
+    "Region": {
+      "Value": {
+        "Ref": "AWS::Region"
+      }
+    },
+    "S3Root": {
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "s3://",
+            {
+              "Ref": "AssetsBucket5CB76180"
+            },
+            "/sagemaker"
+          ]
+        ]
+      }
+    },
+    "SageMakerRoleArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "SageMakerExecutionRole7843F3B8",
+          "Arn"
+        ]
+      }
+    },
+    "SsmParameterPrefix": {
+      "Value": "/lerobot-finetune"
+    }
+  },
+  "Parameters": {
+    "AssetsBucketName": {
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$",
+      "ConstraintDescription": "an S3 bucket name: 3-63 lowercase letters, digits, dots or hyphens, starting and ending with a letter or digit",
+      "Description": "S3 bucket (same region as the stack) holding the asset zips listed in cdk/template/assets.json",
+      "MaxLength": 63,
+      "MinLength": 3,
+      "Type": "String"
+    }
+  },
+  "Resources": {
+    "AWS679f53fac002430cb0da5b7982bd22872D164C4C": {
+      "DependsOn": [
+        "AWS679f53fac002430cb0da5b7982bd2287ServiceRoleC1EA0FF2"
+      ],
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM4",
+              "reason": "CDK-managed AwsCustomResource handler; AWSLambdaBasicExecutionRole grants only CloudWatch Logs write for its own log group."
+            },
+            {
+              "id": "AwsSolutions-L1",
+              "reason": "The handler runtime is chosen by aws-cdk-lib, not this stack; it runs once at deploy time in-account to start a CodeBuild build and processes no input."
+            }
+          ]
+        },
+        "checkov": {
+          "skip": [
+            {
+              "comment": "CDK-managed helper Lambda (runs once at deploy or delete time inside the account, no inbound traffic, no VPC resources to reach)",
+              "id": "CKV_AWS_115"
+            },
+            {
+              "comment": "CDK-managed helper Lambda (runs once at deploy or delete time inside the account, no inbound traffic, no VPC resources to reach)",
+              "id": "CKV_AWS_116"
+            },
+            {
+              "comment": "CDK-managed helper Lambda (runs once at deploy or delete time inside the account, no inbound traffic, no VPC resources to reach)",
+              "id": "CKV_AWS_117"
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "${AssetsBucketName}"
+          },
+          "S3Key": "9b8fce7ae7f25ef82fdbaf6b72523b99d0875c0c9c826642819fb51f11d9b125.zip"
+        },
+        "Handler": "index.handler",
+        "LoggingConfig": {
+          "LogGroup": {
+            "Ref": "CustomResourceLogsE45D40F0"
+          }
+        },
+        "Role": {
+          "Fn::GetAtt": [
+            "AWS679f53fac002430cb0da5b7982bd2287ServiceRoleC1EA0FF2",
+            "Arn"
+          ]
+        },
+        "Runtime": "nodejs24.x",
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ],
+        "Timeout": 120
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "AWS679f53fac002430cb0da5b7982bd2287ServiceRoleC1EA0FF2": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM4",
+              "reason": "CDK-managed AwsCustomResource handler; AWSLambdaBasicExecutionRole grants only CloudWatch Logs write for its own log group."
+            },
+            {
+              "id": "AwsSolutions-L1",
+              "reason": "The handler runtime is chosen by aws-cdk-lib, not this stack; it runs once at deploy time in-account to start a CodeBuild build and processes no input."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition"
+                },
+                ":iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+              ]
+            ]
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "AssetsBucket5CB76180": {
+      "DeletionPolicy": "Delete",
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-S1",
+              "reason": "Server access logging off: the bucket holds datasets and write-once checkpoints read only by this account's SageMaker jobs; enable it (and versioning) if your compliance baseline requires them."
+            }
+          ]
+        },
+        "checkov": {
+          "skip": [
+            {
+              "comment": "No access-logging bucket: the stack is a single bucket sample; add a log bucket if your baseline needs it (docs/SECURITY.md)",
+              "id": "CKV_AWS_18"
+            },
+            {
+              "comment": "Versioning off on purpose: checkpoint pruning deletes 16-30 GB objects; versions would retain them; deploy with -c retainData=true to keep the bucket past the stack",
+              "id": "CKV_AWS_21"
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 7
+              },
+              "Id": "AbortOrphanedMultipartUploads",
+              "Status": "Enabled"
+            },
+            {
+              "ExpirationInDays": 14,
+              "Id": "ExpireSmokeJobs",
+              "Prefix": "sagemaker/jobs/smoke/",
+              "Status": "Enabled"
+            },
+            {
+              "ExpirationInDays": 30,
+              "Id": "ExpireBuildContexts",
+              "Prefix": "sagemaker/build-context/",
+              "Status": "Enabled"
+            },
+            {
+              "ExpirationInDays": 90,
+              "Id": "ExpireBuildArtifacts",
+              "Prefix": "sagemaker/build-artifacts/",
+              "Status": "Enabled"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "Tags": [
+          {
+            "Key": "aws-cdk:auto-delete-objects",
+            "Value": "true"
+          },
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ]
+      },
+      "Type": "AWS::S3::Bucket",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "AssetsBucketAutoDeleteObjectsCustomResource51BA1286": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "AssetsBucketPolicyFFACF6C4"
+      ],
+      "Properties": {
+        "BucketName": {
+          "Ref": "AssetsBucket5CB76180"
+        },
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "Custom::S3AutoDeleteObjects",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "AssetsBucketPolicyFFACF6C4": {
+      "Properties": {
+        "Bucket": {
+          "Ref": "AssetsBucket5CB76180"
+        },
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "s3:*",
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              },
+              "Effect": "Deny",
+              "Principal": {
+                "AWS": "*"
+              },
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "AssetsBucket5CB76180",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "AssetsBucket5CB76180",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "s3:DeleteObject*",
+                "s3:GetBucket*",
+                "s3:List*",
+                "s3:PutBucketPolicy"
+              ],
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": {
+                  "Fn::GetAtt": [
+                    "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092",
+                    "Arn"
+                  ]
+                }
+              },
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "AssetsBucket5CB76180",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "AssetsBucket5CB76180",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        }
+      },
+      "Type": "AWS::S3::BucketPolicy"
+    },
+    "CustomResourceLogsE45D40F0": {
+      "DeletionPolicy": "Delete",
+      "Metadata": {
+        "checkov": {
+          "skip": [
+            {
+              "comment": "CloudWatch Logs default encryption for 30-day build and helper-Lambda logs; a KMS key is left to the deploying account",
+              "id": "CKV_AWS_158"
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "RetentionInDays": 30,
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ]
+      },
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F": {
+      "DependsOn": [
+        "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092"
+      ],
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM4",
+              "reason": "CDK-managed S3 auto-delete provider; AWSLambdaBasicExecutionRole grants only CloudWatch Logs write for its own log group."
+            },
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "The provider deletes every object of this stack's bucket on `cdk destroy`; the wildcard is the bucket's own object ARN."
+            },
+            {
+              "id": "AwsSolutions-L1",
+              "reason": "The provider runtime is chosen by aws-cdk-lib, not this stack; it runs only while the stack is being deleted."
+            }
+          ]
+        },
+        "checkov": {
+          "skip": [
+            {
+              "comment": "CDK-managed helper Lambda (runs once at deploy or delete time inside the account, no inbound traffic, no VPC resources to reach)",
+              "id": "CKV_AWS_115"
+            },
+            {
+              "comment": "CDK-managed helper Lambda (runs once at deploy or delete time inside the account, no inbound traffic, no VPC resources to reach)",
+              "id": "CKV_AWS_116"
+            },
+            {
+              "comment": "CDK-managed helper Lambda (runs once at deploy or delete time inside the account, no inbound traffic, no VPC resources to reach)",
+              "id": "CKV_AWS_117"
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "Code": {
+          "S3Bucket": {
+            "Fn::Sub": "${AssetsBucketName}"
+          },
+          "S3Key": "faa95a81ae7d7373f3e1f242268f904eb748d8d0fdd306e8a6fe515a1905a7d6.zip"
+        },
+        "Description": {
+          "Fn::Join": [
+            "",
+            [
+              "Lambda function for auto-deleting objects in ",
+              {
+                "Ref": "AssetsBucket5CB76180"
+              },
+              " S3 bucket."
+            ]
+          ]
+        },
+        "Handler": "index.handler",
+        "LoggingConfig": {
+          "LogGroup": {
+            "Ref": "CustomResourceLogsE45D40F0"
+          }
+        },
+        "MemorySize": 128,
+        "Role": {
+          "Fn::GetAtt": [
+            "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092",
+            "Arn"
+          ]
+        },
+        "Runtime": "nodejs24.x",
+        "Timeout": 900
+      },
+      "Type": "AWS::Lambda::Function"
+    },
+    "CustomS3AutoDeleteObjectsCustomResourceProviderRole3B1BD092": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM4",
+              "reason": "CDK-managed S3 auto-delete provider; AWSLambdaBasicExecutionRole grants only CloudWatch Logs write for its own log group."
+            },
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "The provider deletes every object of this stack's bucket on `cdk destroy`; the wildcard is the bucket's own object ARN."
+            },
+            {
+              "id": "AwsSolutions-L1",
+              "reason": "The provider runtime is chosen by aws-cdk-lib, not this stack; it runs only while the stack is being deleted."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "ManagedPolicyArns": [
+          {
+            "Fn::Sub": "arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "HubTokenSecretCleanup6A8FFA03": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "HubTokenSecretCleanupCustomResourcePolicy3BC4EA98"
+      ],
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Delete-time cleanup scoped to this stack's own names: the Secrets Manager ARN needs the six-character suffix wildcard the service appends; the SSM statement names its two parameters exactly."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "Delete": "{\"action\":\"deleteSecret\",\"service\":\"SecretsManager\",\"parameters\":{\"SecretId\":\"lerobot-finetune/hf_token\",\"ForceDeleteWithoutRecovery\":true}}",
+        "InstallLatestAwsSdk": false,
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "AWS679f53fac002430cb0da5b7982bd22872D164C4C",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "Custom::HubTokenSecretCleanup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "HubTokenSecretCleanupCustomResourcePolicy3BC4EA98": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Delete-time cleanup scoped to this stack's own names: the Secrets Manager ARN needs the six-character suffix wildcard the service appends; the SSM statement names its two parameters exactly."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "secretsmanager:DeleteSecret",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":secretsmanager:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":secret:lerobot-finetune/hf_token*"
+                  ]
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "HubTokenSecretCleanupCustomResourcePolicy3BC4EA98",
+        "Roles": [
+          {
+            "Ref": "AWS679f53fac002430cb0da5b7982bd2287ServiceRoleC1EA0FF2"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "ImageBuildKickoffC832D100": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "ImageBuildKickoffCustomResourcePolicy1954C75E",
+        "ImageFactory6FAF51D8",
+        "ImageFactoryRoleDefaultPolicyE799B9B3",
+        "ImageFactoryRole44D99495"
+      ],
+      "Properties": {
+        "Create": {
+          "Fn::Join": [
+            "",
+            [
+              "{\"action\":\"startBuild\",\"service\":\"CodeBuild\",\"outputPaths\":[\"build.id\"],\"parameters\":{\"projectName\":\"",
+              {
+                "Ref": "ImageFactory6FAF51D8"
+              },
+              "\",\"environmentVariablesOverride\":[{\"name\":\"IMAGE_TAG\",\"value\":\"v1\",\"type\":\"PLAINTEXT\"},{\"name\":\"DOCKER_SRC_HASH\",\"value\":\"3db284a4ae8822607b0d09da0c19b27539863eda06bca40d5676d6f84d274e06\",\"type\":\"PLAINTEXT\"},{\"name\":\"PUBLISH_SSM\",\"value\":\"1\",\"type\":\"PLAINTEXT\"}]},\"physicalResourceId\":{\"id\":\"lerobot-finetune-image-build-kickoff\"}}"
+            ]
+          ]
+        },
+        "InstallLatestAwsSdk": false,
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "AWS679f53fac002430cb0da5b7982bd22872D164C4C",
+            "Arn"
+          ]
+        },
+        "Update": {
+          "Fn::Join": [
+            "",
+            [
+              "{\"action\":\"startBuild\",\"service\":\"CodeBuild\",\"outputPaths\":[\"build.id\"],\"parameters\":{\"projectName\":\"",
+              {
+                "Ref": "ImageFactory6FAF51D8"
+              },
+              "\",\"environmentVariablesOverride\":[{\"name\":\"IMAGE_TAG\",\"value\":\"v1\",\"type\":\"PLAINTEXT\"},{\"name\":\"DOCKER_SRC_HASH\",\"value\":\"3db284a4ae8822607b0d09da0c19b27539863eda06bca40d5676d6f84d274e06\",\"type\":\"PLAINTEXT\"},{\"name\":\"PUBLISH_SSM\",\"value\":\"1\",\"type\":\"PLAINTEXT\"}]},\"physicalResourceId\":{\"id\":\"lerobot-finetune-image-build-kickoff\"}}"
+            ]
+          ]
+        }
+      },
+      "Type": "Custom::ImageBuildKickoff",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "ImageBuildKickoffCustomResourcePolicy1954C75E": {
+      "DependsOn": [
+        "ImageFactory6FAF51D8",
+        "ImageFactoryRoleDefaultPolicyE799B9B3",
+        "ImageFactoryRole44D99495"
+      ],
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "codebuild:StartBuild",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ImageFactory6FAF51D8",
+                  "Arn"
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "ImageBuildKickoffCustomResourcePolicy1954C75E",
+        "Roles": [
+          {
+            "Ref": "AWS679f53fac002430cb0da5b7982bd2287ServiceRoleC1EA0FF2"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "ImageBuildLogs91B1D7E0": {
+      "DeletionPolicy": "Delete",
+      "Metadata": {
+        "checkov": {
+          "skip": [
+            {
+              "comment": "CloudWatch Logs default encryption for 30-day build and helper-Lambda logs; a KMS key is left to the deploying account",
+              "id": "CKV_AWS_158"
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "RetentionInDays": 30,
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ]
+      },
+      "Type": "AWS::Logs::LogGroup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "ImageFactory6FAF51D8": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-CB4",
+              "reason": "No S3 build artifacts to encrypt with a CMK: the output is a container image in ECR (AES-256 at rest); switch the repo to KMS if your org requires CMKs."
+            },
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Wildcards come from repo.grant_pull_push on this stack's own repo, the action wildcards (s3:GetObject*, GetBucket*, List*) of the CodeBuild S3 source on the trainer asset key and its bucket, the pull-only statement on AWS's public DLC registry (repository names there are not enumerable), the build-context/ and build-artifacts/ prefix grants, and the CDK-generated CloudWatch Logs grants for this project."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "Artifacts": {
+          "Type": "NO_ARTIFACTS"
+        },
+        "Cache": {
+          "Type": "NO_CACHE"
+        },
+        "Description": "Builds trainer/ into lerobot-finetune-sagemaker-training:<IMAGE_TAG>; on success writes the digest-pinned URI to SSM /lerobot-finetune/image_uri",
+        "EncryptionKey": "alias/aws/s3",
+        "Environment": {
+          "ComputeType": "BUILD_GENERAL1_LARGE",
+          "EnvironmentVariables": [
+            {
+              "Name": "ECR_REPO_URI",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Fn::Join": [
+                  "",
+                  [
+                    {
+                      "Fn::Select": [
+                        4,
+                        {
+                          "Fn::Split": [
+                            ":",
+                            {
+                              "Fn::GetAtt": [
+                                "TrainingImageRepoC02A32E1",
+                                "Arn"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    ".dkr.ecr.",
+                    {
+                      "Fn::Select": [
+                        3,
+                        {
+                          "Fn::Split": [
+                            ":",
+                            {
+                              "Fn::GetAtt": [
+                                "TrainingImageRepoC02A32E1",
+                                "Arn"
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    ".",
+                    {
+                      "Ref": "AWS::URLSuffix"
+                    },
+                    "/",
+                    {
+                      "Ref": "TrainingImageRepoC02A32E1"
+                    }
+                  ]
+                ]
+              }
+            },
+            {
+              "Name": "ECR_REPO_NAME",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "TrainingImageRepoC02A32E1"
+              }
+            },
+            {
+              "Name": "DLC_ACCOUNT",
+              "Type": "PLAINTEXT",
+              "Value": "763104351884"
+            },
+            {
+              "Name": "IMAGE_TAG",
+              "Type": "PLAINTEXT",
+              "Value": "v1"
+            },
+            {
+              "Name": "CACHE_FROM_TAG",
+              "Type": "PLAINTEXT",
+              "Value": "auto"
+            },
+            {
+              "Name": "LOCK_MODE",
+              "Type": "PLAINTEXT",
+              "Value": "enforce"
+            },
+            {
+              "Name": "PUBLISH_SSM",
+              "Type": "PLAINTEXT",
+              "Value": "1"
+            },
+            {
+              "Name": "SSM_IMAGE_PARAM",
+              "Type": "PLAINTEXT",
+              "Value": "/lerobot-finetune/image_uri"
+            },
+            {
+              "Name": "SSM_SRC_HASH_PARAM",
+              "Type": "PLAINTEXT",
+              "Value": "/lerobot-finetune/image_src_hash"
+            },
+            {
+              "Name": "ARTIFACTS_BUCKET",
+              "Type": "PLAINTEXT",
+              "Value": {
+                "Ref": "AssetsBucket5CB76180"
+              }
+            },
+            {
+              "Name": "DOCKER_SRC_HASH",
+              "Type": "PLAINTEXT",
+              "Value": "3db284a4ae8822607b0d09da0c19b27539863eda06bca40d5676d6f84d274e06"
+            }
+          ],
+          "Image": "aws/codebuild/standard:7.0",
+          "ImagePullCredentialsType": "CODEBUILD",
+          "PrivilegedMode": true,
+          "Type": "LINUX_CONTAINER"
+        },
+        "LogsConfig": {
+          "CloudWatchLogs": {
+            "GroupName": {
+              "Ref": "ImageBuildLogs91B1D7E0"
+            },
+            "Status": "ENABLED"
+          }
+        },
+        "Name": "lerobot-finetune-image-build",
+        "ServiceRole": {
+          "Fn::GetAtt": [
+            "ImageFactoryRole44D99495",
+            "Arn"
+          ]
+        },
+        "Source": {
+          "BuildSpec": "{\n  \"version\": \"0.2\",\n  \"phases\": {\n    \"pre_build\": {\n      \"commands\": [\n        \"aws ecr get-login-password --region \\\"$AWS_DEFAULT_REGION\\\" | docker login --username AWS --password-stdin \\\"${ECR_REPO_URI%%/*}\\\"\",\n        \"aws ecr get-login-password --region \\\"$AWS_DEFAULT_REGION\\\" | docker login --username AWS --password-stdin \\\"${DLC_ACCOUNT}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com\\\"\",\n        \"set -e\\ndf -h / | tail -1; docker system df\\nDLC_REF=$(grep -m1 -E \\\"^FROM \\\" sagemaker/Dockerfile | sed -E \\\"s#^FROM +[^/]+/##\\\")\\ndocker manifest inspect \\\"${DLC_ACCOUNT}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${DLC_REF}\\\" >/dev/null || { echo \\\"FATAL: DLC base ${DLC_REF} not found in ${AWS_DEFAULT_REGION}: the FROM line of trainer/sagemaker/Dockerfile pins an image that is not published in this region; see https://github.com/aws/deep-learning-containers/blob/master/available_images.md\\\"; exit 1; }\"\n      ]\n    },\n    \"build\": {\n      \"commands\": [\n        \"set -e\\nif [ \\\"$CACHE_FROM_TAG\\\" = \\\"auto\\\" ]; then\\n  CACHE_FROM_TAG=$(aws ecr describe-images --repository-name \\\"$ECR_REPO_NAME\\\" --query \\\"sort_by(imageDetails[?imageTags],&imagePushedAt)[-1].imageTags[0]\\\" --output text 2>/dev/null || true)\\nfi\\nCACHE_ARGS=\\\"\\\"\\nif [ -n \\\"$CACHE_FROM_TAG\\\" ] && [ \\\"$CACHE_FROM_TAG\\\" != \\\"None\\\" ]; then\\n  echo \\\"cache source: $ECR_REPO_URI:$CACHE_FROM_TAG\\\"; CACHE_ARGS=\\\"--cache-from $ECR_REPO_URI:$CACHE_FROM_TAG\\\"\\nfi\\nCONTENT_HASH=$(find . -type f -not -name requirements.lock.built -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12)\\nSRC_TAG=\\\"src-$CONTENT_HASH\\\"; echo \\\"content hash $CONTENT_HASH (asset $DOCKER_SRC_HASH)\\\"; rm -f .skip_build\\nif [ \\\"$LOCK_MODE\\\" = \\\"enforce\\\" ] && aws ecr describe-images --repository-name \\\"$ECR_REPO_NAME\\\" --image-ids imageTag=\\\"$SRC_TAG\\\" >/dev/null 2>&1; then\\n  echo \\\"image for this trainer tree already exists as $ECR_REPO_URI:$SRC_TAG: re-tagging as $IMAGE_TAG, no rebuild\\\"\\n  MANIFEST=$(aws ecr batch-get-image --repository-name \\\"$ECR_REPO_NAME\\\" --image-ids imageTag=\\\"$SRC_TAG\\\" --query \\\"images[0].imageManifest\\\" --output text)\\n  aws ecr put-image --repository-name \\\"$ECR_REPO_NAME\\\" --image-tag \\\"$IMAGE_TAG\\\" --image-manifest \\\"$MANIFEST\\\" >/dev/null 2>&1 || true\\n  echo 1 > .skip_build\\nelse\\n  DOCKER_BUILDKIT=1 docker build -f sagemaker/Dockerfile --build-arg BUILDKIT_INLINE_CACHE=1 --build-arg DLC_REGION=\\\"$AWS_DEFAULT_REGION\\\" --build-arg LOCK_MODE=\\\"$LOCK_MODE\\\" --label org.opencontainers.image.revision=\\\"$DOCKER_SRC_HASH\\\" --label org.opencontainers.image.version=\\\"$CONTENT_HASH\\\" $CACHE_ARGS -t \\\"$ECR_REPO_URI:$IMAGE_TAG\\\" -t \\\"$ECR_REPO_URI:$SRC_TAG\\\" .\\n  docker run --rm --entrypoint cat \\\"$ECR_REPO_URI:$IMAGE_TAG\\\" /opt/ml/code/requirements.lock.built > requirements.lock.built || true\\nfi\"\n      ]\n    },\n    \"post_build\": {\n      \"commands\": [\n        \"if [ \\\"$CODEBUILD_BUILD_SUCCEEDING\\\" != \\\"1\\\" ]; then echo \\\"build failed: not pushing, not touching SSM\\\"; exit 1; fi\\nset -e\\nif [ \\\"$LOCK_MODE\\\" = \\\"generate\\\" ]; then\\n  aws s3 cp requirements.lock.built \\\"s3://$ARTIFACTS_BUCKET/sagemaker/build-artifacts/$CODEBUILD_BUILD_ID/requirements.lock\\\"\\n  echo \\\"generate mode: lock uploaded, image NOT pushed\\\"; exit 0\\nfi\\nif [ -f .skip_build ]; then echo \\\"re-tagged existing image; nothing to push\\\"; else\\n  CONTENT_HASH=$(find . -type f -not -name requirements.lock.built -not -name .skip_build -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c1-12)\\n  SRC_TAG=\\\"src-$CONTENT_HASH\\\"; docker push \\\"$ECR_REPO_URI:$IMAGE_TAG\\\"; docker push \\\"$ECR_REPO_URI:$SRC_TAG\\\"\\nfi\\nDIGEST=$(aws ecr describe-images --repository-name \\\"$ECR_REPO_NAME\\\" --image-ids imageTag=\\\"$IMAGE_TAG\\\" --query \\\"imageDetails[0].imageDigest\\\" --output text)\\necho \\\"pushed $ECR_REPO_URI:$IMAGE_TAG ($DIGEST)\\\"\\nif [ \\\"$PUBLISH_SSM\\\" = \\\"1\\\" ]; then\\n  aws ssm put-parameter --name \\\"$SSM_IMAGE_PARAM\\\" --type String --overwrite --value \\\"$ECR_REPO_URI@$DIGEST\\\"\\n  aws ssm put-parameter --name \\\"$SSM_SRC_HASH_PARAM\\\" --type String --overwrite --value \\\"$DOCKER_SRC_HASH\\\"\\n  echo \\\"SSM $SSM_IMAGE_PARAM -> $ECR_REPO_URI@$DIGEST\\\"\\nfi\"\n      ]\n    }\n  }\n}",
+          "Location": {
+            "Fn::Join": [
+              "",
+              [
+                {
+                  "Fn::Sub": "${AssetsBucketName}"
+                },
+                "/3db284a4ae8822607b0d09da0c19b27539863eda06bca40d5676d6f84d274e06.zip"
+              ]
+            ]
+          },
+          "Type": "S3"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ],
+        "TimeoutInMinutes": 120
+      },
+      "Type": "AWS::CodeBuild::Project"
+    },
+    "ImageFactoryRole44D99495": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-CB4",
+              "reason": "No S3 build artifacts to encrypt with a CMK: the output is a container image in ECR (AES-256 at rest); switch the repo to KMS if your org requires CMKs."
+            },
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Wildcards come from repo.grant_pull_push on this stack's own repo, the action wildcards (s3:GetObject*, GetBucket*, List*) of the CodeBuild S3 source on the trainer asset key and its bucket, the pull-only statement on AWS's public DLC registry (repository names there are not enumerable), the build-context/ and build-artifacts/ prefix grants, and the CDK-generated CloudWatch Logs grants for this project."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "codebuild.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "ImageFactoryRoleDefaultPolicyE799B9B3": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-CB4",
+              "reason": "No S3 build artifacts to encrypt with a CMK: the output is a container image in ECR (AES-256 at rest); switch the repo to KMS if your org requires CMKs."
+            },
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Wildcards come from repo.grant_pull_push on this stack's own repo, the action wildcards (s3:GetObject*, GetBucket*, List*) of the CodeBuild S3 source on the trainer asset key and its bucket, the pull-only statement on AWS's public DLC registry (repository names there are not enumerable), the build-context/ and build-artifacts/ prefix grants, and the CDK-generated CloudWatch Logs grants for this project."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetBucket*",
+                "s3:GetObject*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "AssetsBucket5CB76180",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":s3:::",
+                      {
+                        "Fn::Sub": "${AssetsBucketName}"
+                      },
+                      "/3db284a4ae8822607b0d09da0c19b27539863eda06bca40d5676d6f84d274e06.zip"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":s3:::",
+                      {
+                        "Fn::Sub": "${AssetsBucketName}"
+                      }
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "AssetsBucket5CB76180",
+                          "Arn"
+                        ]
+                      },
+                      "/sagemaker/build-context/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "ImageBuildLogs91B1D7E0",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":logs:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":log-group:/aws/codebuild/",
+                      {
+                        "Ref": "ImageFactory6FAF51D8"
+                      },
+                      ":*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":logs:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":log-group:/aws/codebuild/",
+                      {
+                        "Ref": "ImageFactory6FAF51D8"
+                      }
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "codebuild:BatchPutCodeCoverages",
+                "codebuild:BatchPutTestCases",
+                "codebuild:CreateReport",
+                "codebuild:CreateReportGroup",
+                "codebuild:UpdateReport"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":codebuild:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":report-group/",
+                    {
+                      "Ref": "ImageFactory6FAF51D8"
+                    },
+                    "-*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Action": [
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:BatchGetImage",
+                "ecr:CompleteLayerUpload",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:InitiateLayerUpload",
+                "ecr:PutImage",
+                "ecr:UploadLayerPart"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "TrainingImageRepoC02A32E1",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Action": "ecr:GetAuthorizationToken",
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": "ecr:DescribeImages",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "TrainingImageRepoC02A32E1",
+                  "Arn"
+                ]
+              },
+              "Sid": "DescribeImagesForCacheAndDigest"
+            },
+            {
+              "Action": [
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:BatchGetImage",
+                "ecr:GetDownloadUrlForLayer"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":ecr:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":763104351884:repository/*"
+                  ]
+                ]
+              },
+              "Sid": "DlcBaseImagePull"
+            },
+            {
+              "Action": "ssm:PutParameter",
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":ssm:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":parameter/lerobot-finetune/image_src_hash"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":ssm:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":parameter/lerobot-finetune/image_uri"
+                    ]
+                  ]
+                }
+              ],
+              "Sid": "PublishImageParams"
+            },
+            {
+              "Action": [
+                "s3:Abort*",
+                "s3:PutObject",
+                "s3:PutObjectLegalHold",
+                "s3:PutObjectRetention",
+                "s3:PutObjectTagging",
+                "s3:PutObjectVersionTagging"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    {
+                      "Fn::GetAtt": [
+                        "AssetsBucket5CB76180",
+                        "Arn"
+                      ]
+                    },
+                    "/sagemaker/build-artifacts/*"
+                  ]
+                ]
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "ImageFactoryRoleDefaultPolicyE799B9B3",
+        "Roles": [
+          {
+            "Ref": "ImageFactoryRole44D99495"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "ImageParamsCleanup30DD04FE": {
+      "DeletionPolicy": "Delete",
+      "DependsOn": [
+        "ImageParamsCleanupCustomResourcePolicyB5491CD9"
+      ],
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Delete-time cleanup scoped to this stack's own names: the Secrets Manager ARN needs the six-character suffix wildcard the service appends; the SSM statement names its two parameters exactly."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "Delete": "{\"action\":\"deleteParameters\",\"service\":\"SSM\",\"parameters\":{\"Names\":[\"/lerobot-finetune/image_uri\",\"/lerobot-finetune/image_src_hash\"]}}",
+        "InstallLatestAwsSdk": false,
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "AWS679f53fac002430cb0da5b7982bd22872D164C4C",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "Custom::ImageParamsCleanup",
+      "UpdateReplacePolicy": "Delete"
+    },
+    "ImageParamsCleanupCustomResourcePolicyB5491CD9": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Delete-time cleanup scoped to this stack's own names: the Secrets Manager ARN needs the six-character suffix wildcard the service appends; the SSM statement names its two parameters exactly."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": "ssm:DeleteParameters",
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":ssm:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":parameter/lerobot-finetune/image_src_hash"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:",
+                      {
+                        "Ref": "AWS::Partition"
+                      },
+                      ":ssm:",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId"
+                      },
+                      ":parameter/lerobot-finetune/image_uri"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "ImageParamsCleanupCustomResourcePolicyB5491CD9",
+        "Roles": [
+          {
+            "Ref": "AWS679f53fac002430cb0da5b7982bd2287ServiceRoleC1EA0FF2"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "ParamBucketF03F1E6E": {
+      "Properties": {
+        "Name": "/lerobot-finetune/bucket",
+        "Tags": {
+          "project": "lerobot-finetune"
+        },
+        "Type": "String",
+        "Value": {
+          "Ref": "AssetsBucket5CB76180"
+        }
+      },
+      "Type": "AWS::SSM::Parameter"
+    },
+    "ParamEcrRepoUri40C16983": {
+      "Properties": {
+        "Name": "/lerobot-finetune/ecr_repo_uri",
+        "Tags": {
+          "project": "lerobot-finetune"
+        },
+        "Type": "String",
+        "Value": {
+          "Fn::Join": [
+            "",
+            [
+              {
+                "Fn::Select": [
+                  4,
+                  {
+                    "Fn::Split": [
+                      ":",
+                      {
+                        "Fn::GetAtt": [
+                          "TrainingImageRepoC02A32E1",
+                          "Arn"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              ".dkr.ecr.",
+              {
+                "Fn::Select": [
+                  3,
+                  {
+                    "Fn::Split": [
+                      ":",
+                      {
+                        "Fn::GetAtt": [
+                          "TrainingImageRepoC02A32E1",
+                          "Arn"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              ".",
+              {
+                "Ref": "AWS::URLSuffix"
+              },
+              "/",
+              {
+                "Ref": "TrainingImageRepoC02A32E1"
+              }
+            ]
+          ]
+        }
+      },
+      "Type": "AWS::SSM::Parameter"
+    },
+    "ParamProject5C804A31": {
+      "Properties": {
+        "Name": "/lerobot-finetune/project",
+        "Tags": {
+          "project": "lerobot-finetune"
+        },
+        "Type": "String",
+        "Value": "lerobot-finetune"
+      },
+      "Type": "AWS::SSM::Parameter"
+    },
+    "ParamRegion42F6CCB6": {
+      "Properties": {
+        "Name": "/lerobot-finetune/region",
+        "Tags": {
+          "project": "lerobot-finetune"
+        },
+        "Type": "String",
+        "Value": {
+          "Ref": "AWS::Region"
+        }
+      },
+      "Type": "AWS::SSM::Parameter"
+    },
+    "ParamSagemakerRoleArnCE1E7CF0": {
+      "Properties": {
+        "Name": "/lerobot-finetune/sagemaker_role_arn",
+        "Tags": {
+          "project": "lerobot-finetune"
+        },
+        "Type": "String",
+        "Value": {
+          "Fn::GetAtt": [
+            "SageMakerExecutionRole7843F3B8",
+            "Arn"
+          ]
+        }
+      },
+      "Type": "AWS::SSM::Parameter"
+    },
+    "SageMakerExecutionRole7843F3B8": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Object-level wildcards are scoped to this stack's single bucket ARN (jobs read and put under run-named prefixes created at runtime); ecr:GetAuthorizationToken supports only Resource:*; PutMetricData is restricted by condition to the SageMaker training namespace; /aws/sagemaker/* log groups are created by the service per job."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Condition": {
+                "ArnLike": {
+                  "aws:SourceArn": {
+                    "Fn::Join": [
+                      "",
+                      [
+                        "arn:",
+                        {
+                          "Ref": "AWS::Partition"
+                        },
+                        ":sagemaker:",
+                        {
+                          "Ref": "AWS::Region"
+                        },
+                        ":",
+                        {
+                          "Ref": "AWS::AccountId"
+                        },
+                        ":*"
+                      ]
+                    ]
+                  }
+                },
+                "StringEquals": {
+                  "aws:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              },
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "sagemaker.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Role"
+    },
+    "SageMakerExecutionRoleDefaultPolicy2414594F": {
+      "Metadata": {
+        "cdk_nag": {
+          "rules_to_suppress": [
+            {
+              "id": "AwsSolutions-IAM5",
+              "reason": "Object-level wildcards are scoped to this stack's single bucket ARN (jobs read and put under run-named prefixes created at runtime); ecr:GetAuthorizationToken supports only Resource:*; PutMetricData is restricted by condition to the SageMaker training namespace; /aws/sagemaker/* log groups are created by the service per job."
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "s3:GetBucket*",
+                "s3:GetObject*",
+                "s3:List*"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "AssetsBucket5CB76180",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "AssetsBucket5CB76180",
+                          "Arn"
+                        ]
+                      },
+                      "/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "s3:Abort*",
+                "s3:DeleteObject*",
+                "s3:PutObject",
+                "s3:PutObjectLegalHold",
+                "s3:PutObjectRetention",
+                "s3:PutObjectTagging",
+                "s3:PutObjectVersionTagging"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "AssetsBucket5CB76180",
+                          "Arn"
+                        ]
+                      },
+                      "/sagemaker/hub/*"
+                    ]
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "AssetsBucket5CB76180",
+                          "Arn"
+                        ]
+                      },
+                      "/sagemaker/jobs/*"
+                    ]
+                  ]
+                }
+              ]
+            },
+            {
+              "Action": [
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:BatchGetImage",
+                "ecr:GetDownloadUrlForLayer"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::GetAtt": [
+                  "TrainingImageRepoC02A32E1",
+                  "Arn"
+                ]
+              }
+            },
+            {
+              "Action": "ecr:GetAuthorizationToken",
+              "Effect": "Allow",
+              "Resource": "*"
+            },
+            {
+              "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:DescribeLogStreams",
+                "logs:PutLogEvents"
+              ],
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":logs:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":log-group:/aws/sagemaker/*"
+                  ]
+                ]
+              },
+              "Sid": "TrainingJobLogsAndMetrics"
+            },
+            {
+              "Action": "cloudwatch:PutMetricData",
+              "Condition": {
+                "StringEquals": {
+                  "cloudwatch:namespace": "/aws/sagemaker/TrainingJobs"
+                }
+              },
+              "Effect": "Allow",
+              "Resource": "*",
+              "Sid": "TrainingJobMetrics"
+            },
+            {
+              "Action": "secretsmanager:GetSecretValue",
+              "Effect": "Allow",
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":secretsmanager:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":secret:lerobot-finetune/hf_token*"
+                  ]
+                ]
+              },
+              "Sid": "HubTokenSecret"
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "SageMakerExecutionRoleDefaultPolicy2414594F",
+        "Roles": [
+          {
+            "Ref": "SageMakerExecutionRole7843F3B8"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+    "TrainingImageRepoC02A32E1": {
+      "DeletionPolicy": "Delete",
+      "Metadata": {
+        "checkov": {
+          "skip": [
+            {
+              "comment": "Mutable tags are the CodeBuild layer cache; training jobs pin the image by digest from SSM, never by tag",
+              "id": "CKV_AWS_51"
+            },
+            {
+              "comment": "AES-256 (ECR default) encryption; a customer-managed KMS key is left to the deploying account",
+              "id": "CKV_AWS_136"
+            }
+          ]
+        }
+      },
+      "Properties": {
+        "EmptyOnDelete": true,
+        "ImageScanningConfiguration": {
+          "ScanOnPush": true
+        },
+        "ImageTagMutability": "MUTABLE",
+        "LifecyclePolicy": {
+          "LifecyclePolicyText": "{\"rules\":[{\"rulePriority\":1,\"description\":\"untagged layers expire\",\"selection\":{\"tagStatus\":\"untagged\",\"countType\":\"sinceImagePushed\",\"countNumber\":7,\"countUnit\":\"days\"},\"action\":{\"type\":\"expire\"}},{\"rulePriority\":2,\"description\":\"developer builds expire\",\"selection\":{\"tagStatus\":\"tagged\",\"tagPrefixList\":[\"dev-\"],\"countType\":\"sinceImagePushed\",\"countNumber\":7,\"countUnit\":\"days\"},\"action\":{\"type\":\"expire\"}},{\"rulePriority\":3,\"description\":\"keep the last 20 source-hash tags\",\"selection\":{\"tagStatus\":\"tagged\",\"tagPrefixList\":[\"src-\"],\"countType\":\"imageCountMoreThan\",\"countNumber\":20},\"action\":{\"type\":\"expire\"}}]}"
+        },
+        "RepositoryName": "lerobot-finetune-sagemaker-training",
+        "Tags": [
+          {
+            "Key": "project",
+            "Value": "lerobot-finetune"
+          }
+        ]
+      },
+      "Type": "AWS::ECR::Repository",
+      "UpdateReplacePolicy": "Delete"
+    }
+  }
+}

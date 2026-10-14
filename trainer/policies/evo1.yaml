@@ -1,0 +1,106 @@
+# Registry entry: EVO-1 (InternVL3-1B backbone + flow-matching action head), lerobot 0.6.1 policy type "evo1".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+# Flag names verified against policies/evo1/configuration_evo1.py and configs/train.py in the release image (2026-09-10).
+name: evo1
+display_name: EVO-1 (InternVL3-1B + flow-matching head)
+tier: 2
+status: smoke-tested     # 200-step GPU smoke passed 2026-09-14 on hjkso1406/so101-4tasks-100eps @ 52df842e (provenance caveat: anonymous uploader, card-only Apache-2.0) (docs/RESULTS.md)
+deliverable: false
+lerobot_type: evo1
+precision: fp32_masters_bf16_autocast   # stage1: frozen bf16 VLM, fp32 action head, EVO1's own bf16 autocast (use_amp=true)
+base_checkpoint: OpenGVLab/InternVL3-1B-hf   # the VLM init (policy.vlm_model_name); the action head starts from scratch
+hub_artifacts:               # AutoTokenizer/AutoModel.from_pretrained at policy construction; a local dir works for vlm_model_name
+  - {repo: OpenGVLab/InternVL3-1B-hf, revision: 014c0583a0d4bedf29fbe2dbff4f865eb998e171, role: InternVL3 VLM weights + tokenizer (native HF layout, no remote code), gated: false}  # pragma: allowlist secret
+requires_flat_action_names: false      # state/action are zero-padded to max_*_dim=24; names are not parsed
+max_action_dim: 24                  # state and action are zero-padded to 24 dims inside the policy; wider datasets are refused
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+camera_mapping_required: false         # up to max_views=3 VISUAL features in dataset order; a 4th camera needs --policy.max_views
+smoke_candidate: true        # 200 steps on ml.g6e.4xlarge, hjkso1406/so101-4tasks-100eps; InternVL3-1B-hf staged by the hub job (ungated)
+stub_reason: null            # promoted 2026-09-14: smoke PASS at 1.37 steps/s on L40S, 100% tensors moved, reload ok (docs/RESULTS.md)
+
+licence:
+  class: unknown             # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: null
+  url: https://huggingface.co/OpenGVLab/InternVL3-1B-hf
+  commercial_use: "unknown"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    Weights are initialised from OpenGVLab/InternVL3-1B-hf. Its Hugging Face model card metadata declares licence
+    "other" named "qwen" and links to the Qwen2.5-72B-Instruct LICENSE, while the card's text says MIT with a Qwen2.5
+    component. Which Qwen licence binds the 1B language component was not verified. The EVO-1 code
+    (github.com/MINT-SJTU/Evo-1) publishes no licence text. Treat fine-tunes as unresolved until the publisher
+    clarifies. The lerobot integration itself is Apache-2.0.
+
+hardware:
+  vram_gb: 16                # estimated, not measured: 0.94 B frozen bf16 VLM + ~100 M fp32 head, batch 8, three 448x448 views
+  min_gpu_memory_gb: 24
+  checkpoint_gb: 2            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (ESTIMATE: 1.8 GB checkpoint (frozen VLM bf16 + fp32 head); InternVL3-1B-hf 1.9 GB staged)
+  hub_gb: 1.9                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6.4xlarge, ml.g5.4xlarge]
+  step_rate:
+    L40S: 1.37             # measured, 200-step smoke 2026-09-14 (registry smoke batch), hjkso1406/so101-4tasks-100eps @ 52df842e (provenance caveat: anonymous uploader, card-only Apache-2.0)
+
+defaults:                    # the lerobot doc's stage-1 recipe (frozen VLM, action head only)
+  steps: 5000
+  batch_size: 8              # doc: 4 on one GPU, 64 x 2 GPUs for the LIBERO reference run
+  chunk: 50                  # upstream default; project_config horizon_seconds derives it for the dataset frame rate
+  save_freq: 2500
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=evo1
+    - --policy.training_stage=stage1         # freezes the VLM; stage2 needs --policy.path=<stage1 ckpt> and is a follow-up run
+    - --policy.vlm_model_name=OpenGVLab/InternVL3-1B-hf
+    - --policy.vlm_dtype=bfloat16            # frozen in stage1, so bf16 storage is harmless; stage2 must use float32
+    - --policy.use_amp=true                  # EVO1 opens its own bf16 autocast; the fp32 flow loss is computed outside it
+    - --policy.use_flash_attn=false          # flash_attn is not in the image; avoids the fallback warning on every start
+    - --policy.image_resolution=[448,448]    # must equal the InternVL3 checkpoint's native square size or __init__ raises
+    - --policy.chunk_size=${CHUNK}
+    - --policy.n_action_steps=${CHUNK}
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: none            # cosine_annealing_with_warmup has no num_decay_steps field, so 'extend' may only add --steps
+  forbidden_flags:
+    - --policy.training_stage=stage2         # needs a stage-1 checkpoint via --policy.path; not renderable in fresh mode
+    - --policy.vlm_dtype=float16
+    - --policy.use_amp=false                 # the frozen bf16 VLM then feeds an fp32 head with no autocast: untested path
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC; PyAV is used
+
+eval:
+  policy_arg: evo1
+  n_samples: 4               # flow matching with 32 inference timesteps sampled from noise: stochastic
+  history_frames: 1          # n_obs_steps=1, observation_delta_indices=[0]
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: dataset action space, zero-padded to 24 dims inside the model and cropped on output
+  control_rate: dataset fps
+  notes: >-
+    Every camera is resized on device to 448x448 (4:3 sources are squashed). Language prompt is the dataset task
+    field. Only 14 of the InternVL3 language layers are kept (vlm_num_layers). Output chunk of n_action_steps actions.

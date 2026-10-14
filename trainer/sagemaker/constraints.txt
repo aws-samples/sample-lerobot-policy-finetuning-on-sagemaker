@@ -1,0 +1,8 @@
+# Pins for the SageMaker image. torch family = what the DLC base ships (do not let pip upgrade it);
+# lerobot 0.6.1 = the version the act_c24 checkpoint was trained and evaluated with.
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
+torchcodec==0.7.0   # resolved for the install, then uninstalled (see Dockerfile); decoding uses av
+numpy<2.3
+lerobot==0.6.1

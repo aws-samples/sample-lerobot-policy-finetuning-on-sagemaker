@@ -1,0 +1,12 @@
+# Vendored code the scanners must not attribute to this repository:
+# the two Lambda handler runtimes (AwsCustomResource, S3 auto-delete provider) are aws-cdk-lib's minified output,
+# redistributed unmodified (THIRD-PARTY-LICENSES).
+cdk/template/assets/kickoff-handler/
+cdk/template/assets/s3-auto-delete-handler/
+# synth output and virtualenvs (git-ignored, but scanners that synthesize the app recreate them)
+cdk/cdk.out/
+cdk/cdk.out-test/
+cdk/cdk.out-test-destroy/
+cdk/.venv/
+.venv/
+local_folder/

@@ -1,0 +1,90 @@
+# Registry entry: ACT (Action Chunking Transformer), lerobot 0.6.1 policy type "act".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: act
+display_name: ACT (Action Chunking Transformer)
+tier: 0
+status: validated            # validated | trained | smoke-tested | stub
+deliverable: true
+lerobot_type: act
+precision: fp32
+base_checkpoint: null        # trained from scratch; the torchvision ResNet18 ImageNet init is the only inherited weight
+hub_artifacts: []            # nothing is downloaded at run time (the ResNet18 file is pre-staged in the image)
+requires_flat_action_names: false
+smoke_candidate: true        # the control row of the smoke matrix: the same 200-step run re-checks every new image
+
+licence:
+  class: clean               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0
+  url: https://github.com/huggingface/lerobot/blob/v0.6.1/LICENSE
+  commercial_use: "yes"
+  weights_fetched_by: none
+  gated: false
+  requires_accept: false
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    Trained from scratch on your dataset with lerobot 0.6.1 (Apache-2.0). The upstream ACT code is MIT (Tony Z. Zhao,
+    2023). The only inherited weights are torchvision's ResNet18 ImageNet-1k initialisation (BSD-3-Clause code).
+
+hardware:
+  vram_gb: 4.3               # measured at batch 8, chunk 24, three 360x640 cameras
+  min_gpu_memory_gb: 16
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6e.xlarge, ml.g6.4xlarge, ml.g5.4xlarge, ml.g5.2xlarge, ml.g4dn.2xlarge]
+  step_rate:                 # steps/s at batch 8 (measured); used for the runtime cap before a smoke has measured it
+    L40S: 10.0
+    A10G: 5.0
+    T4: 1.74
+
+defaults:                    # the act_c24 recipe (validated twice: EC2 2026-08-18, SageMaker 2026-09-09)
+  steps: 100000
+  batch_size: 8
+  chunk: 24                  # 0.96 s at 25 fps; project_config horizon_seconds derives it for other frame rates
+  save_freq: 10000
+  log_freq: 200
+  seed: 1000
+
+train:
+  # The validated lerobot-train argv as data. ${VAR} placeholders are filled from the trainer's environment.
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=act
+    - --policy.chunk_size=${CHUNK}
+    - --policy.n_action_steps=${CHUNK}
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:             # emitted only when the variable is set (inserted after --dataset.episodes, as validated)
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: none            # ACT trains at a constant LR: 'extend' adds only --steps, never --scheduler.num_decay_steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC (static Python); PyAV is used
+    - --policy.dtype=bfloat16                # not an ACTConfig field (draccus rejects it); ACT is fp32-only, use_amp is its sole precision knob
+    - --policy.dtype=float16
+
+eval:
+  policy_arg: act
+  n_samples: 1               # deterministic
+  history_frames: 1
+
+smoke:
+  steps: 200
+  log_freq: 50               # several metric windows inside 200 steps, so a step rate can be measured
+
+serving:
+  frames_per_camera: 1
+  action_space: absolute joint positions
+  control_rate: dataset fps
+  notes: >-
+    No language input. One observation in, a chunk of n_action_steps actions out.

@@ -1,0 +1,70 @@
+{
+  "_comment": "The only file you edit. Pick the dataset folder under datasets/, enable the policies you want, set compute. Registry facts per policy (training flags, tier, VRAM, licence class) live in trainer/policies/*.yaml and are maintained with the repo, not here. CLI flags of ./finetune.sh override anything below for one run.",
+  "project": "lerobot-finetune",
+  "secrets": {
+    "_comment": "Name of an AWS Secrets Manager secret holding a Hugging Face token. Needed only for gated base weights (pi0 / pi0.5 / pi0_fast PaliGemma tokenizer, GR00T Cosmos-Reason2 processor); read once by the base-weight staging job, never by a training job (training runs with network isolation on).",
+    "hf_token": "lerobot-finetune/hf_token"
+  },
+  "dataset": {
+    "_comment": "source=local reads datasets/<name>/ (the hard requirement: a LeRobot v3.0 dataset folder). source=huggingface downloads hf_repo_id@hf_revision into datasets/<name>/ first (the shipped default is a small public SO-101 pick-and-place set, Apache-2.0). source=s3 points at a dataset already staged in your own bucket. Videos taller than downscale_height are downscaled inside the job; null keeps the source resolution.",
+    "name": "svla_so101_pickplace",
+    "source": "huggingface",
+    "hf_repo_id": "lerobot/svla_so101_pickplace",
+    "hf_revision": "v3.0",
+    "s3_uri": null,
+    "downscale_height": 360
+  },
+  "evaluation": {
+    "_comment": "stride 10 keeps the multi-sample VLA evaluation to minutes; the reference band applies to stride-1 evaluations only, so these runs get reference rows, not a verdict",
+    "heldout": "auto",
+    "stride": 10,
+    "checkpoints": [
+      "last"
+    ]
+  },
+  "compute": {
+    "_comment": "One single-GPU instance per training job; bigger multi-GPU boxes do not speed this trainer up. ml.g6e.4xlarge (L40S 48 GB) is the validated default; ml.g5.4xlarge and ml.g4dn.2xlarge work for ACT at 1/2 and 1/6 of the speed. Quotas default to 0 in new accounts \u2014 see README 'Quotas'. spot=true uses managed Spot with checkpoint resume. volume_gb null = derived from the dataset size.",
+    "instance_type": "ml.g6e.4xlarge",
+    "spot": false,
+    "fallback_instance_types": [],
+    "volume_gb": null,
+    "runtime_multiplier": 1.5
+  },
+  "smoke": {
+    "_comment": "Before every training job a 200-step job on the same instance proves the image, dataset and flags (< $1). reuse=true skips it when an identical smoke already passed.",
+    "enabled": true,
+    "steps": 200,
+    "reuse": true
+  },
+  "policies": {
+    "_comment": "Four vision-language-action policies on the public dataset, as recorded in docs/RESULTS.md (2026-09-11). act is left out so the run stays within the g6e.4xlarge quota of 4.",
+    "smolvla": {
+      "enabled": true,
+      "steps": 20000,
+      "_comment": "Apache-2.0; from-scratch action expert on the staged SmolVLM2 backbone (hub job); batch 16 = the measured step rate"
+    },
+    "xvla": {
+      "enabled": true,
+      "steps": 30000,
+      "accept_licence": true,
+      "_comment": "staged lerobot/xvla-base + BART tokenizer; accept_licence acknowledges the publisher's terms (docs/POLICIES.md)"
+    },
+    "pi0": {
+      "enabled": true,
+      "steps": 20000,
+      "accept_licence": true,
+      "_comment": "staged lerobot/pi0_base + gated google/paligemma-3b-pt-224 tokenizer: needs secrets.hf_token"
+    },
+    "pi05": {
+      "enabled": true,
+      "steps": 20000,
+      "accept_licence": true,
+      "_comment": "as pi0; QUANTILES normalisation, q01/q99 are completed in-job when the dataset lacks them"
+    }
+  },
+  "extra_job_tags": {},
+  "image": {
+    "_comment": "ECR tag the deploy-time CodeBuild image build pushes. Read by cdk/app.py; training jobs pin the image by digest (SSM /<project>/image_uri), never by tag.",
+    "tag": "v1"
+  }
+}

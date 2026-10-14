@@ -1,0 +1,100 @@
+# Registry entry: Diffusion Policy (CNN / 1-D U-Net variant), lerobot 0.6.1 policy type "diffusion".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: diffusion
+display_name: Diffusion Policy (U-Net, DDPM)
+tier: 0
+status: smoke-tested     # 200-step GPU smoke on the public dataset passed 2026-09-10 (docs/RESULTS.md)
+deliverable: true
+lerobot_type: diffusion
+precision: fp32              # upstream trains fp32; the config has no dtype field (draccus rejects --policy.dtype outright)
+base_checkpoint: null        # trained from scratch; lerobot/diffusion_pusht (2-dim PushT) is a demo, never a fine-tune start
+hub_artifacts: []            # nothing is downloaded at run time (torchvision ResNet18 IMAGENET1K_V1 is pre-staged in the image)
+requires_flat_action_names: false
+smoke_candidate: true        # 200 steps on ml.g6e.4xlarge, public dataset: PASSED 2026-09-10 (6.25 steps/s, 9 GB)
+stub_reason: null            # promoted 2026-09-10: 200-step GPU smoke passed on the public dataset (docs/RESULTS.md)
+
+licence:
+  class: clean               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0
+  url: https://github.com/huggingface/lerobot/blob/v0.6.1/LICENSE
+  commercial_use: "yes"
+  weights_fetched_by: none
+  gated: false
+  requires_accept: false
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    Trained from scratch on your dataset with lerobot 0.6.1 (Apache-2.0). The upstream Diffusion Policy code is MIT
+    (Columbia AI and Robotics Lab, 2023) and the noise schedulers come from Hugging Face diffusers (Apache-2.0). The
+    only inherited weights are torchvision's ResNet18 ImageNet-1k initialisation (BSD-3-Clause code), one encoder per
+    camera by default.
+
+hardware:
+  vram_gb: 20                # ESTIMATED, not measured: 262.7 M fp32 params + Adam plus n_obs_steps(2) x cameras image passes at batch 16
+  min_gpu_memory_gb: 24
+  checkpoint_gb: 2.4            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (ESTIMATE: 263M params fp32 + Adam)
+  hub_gb: 0                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6e.xlarge, ml.g6.4xlarge, ml.g5.4xlarge]   # 48 GB class preferred until measured
+  step_rate:
+    L40S: 6.25             # measured, 200-step smoke 2026-09-10, batch 16, two 480x360 cameras
+
+defaults:                    # adapted from the PushT card (batch 64, 200k steps) to a single-arm real-robot dataset; UNVERIFIED
+  steps: 100000
+  batch_size: 16
+  chunk: 24                  # n_action_steps (executed per inference); horizon stays 64 so any chunk <= 63 satisfies n_action_steps <= horizon - n_obs_steps + 1
+  save_freq: 10000
+  log_freq: 200
+  seed: 1000
+
+train:
+  # ${VAR} placeholders are filled from the trainer's environment, exactly as for act.
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=diffusion
+    - --policy.n_obs_steps=2                 # 2-frame observation history (paper To=2); the eval harness must stack 2 frames
+    - --policy.horizon=64                    # must be a multiple of 2**len(down_dims)=8, else __post_init__ raises
+    - --policy.n_action_steps=${CHUNK}       # <= horizon - n_obs_steps + 1 = 63; project_config derives CHUNK from horizon_seconds
+    - --policy.do_mask_loss_for_padding=true # default false trains on copy-padded episode tails; masking uses action_is_pad
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  # The preset is DiffuserSchedulerConfig(name=cosine, warmup 500): its length is --steps (num_training_steps) and it has NO
+  # num_decay_steps field, so 'extend' must add only --steps. 'none' here means exactly that (extension is a warm restart, LR jumps up).
+  scheduler: none
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC (static Python); PyAV is used
+    - --policy.dtype=bfloat16                # no such field on DiffusionConfig; hard-casting is not a supported path anyway
+    - --policy.dtype=float16
+    - --policy.normalization_mapping         # ACTION must stay MIN_MAX: clip_sample=true clips every denoising step to [-1, 1]
+
+eval:
+  policy_arg: diffusion
+  n_samples: 5               # stochastic: DDPM sampling from Gaussian noise (100 steps by default); average over samples
+  history_frames: 2          # predict_action_chunk (modeling_diffusion.py:104) expects (B, n_obs_steps, ...) per key
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 2
+  action_space: absolute joint positions (MIN_MAX normalised to [-1, 1] internally)
+  control_rate: dataset fps
+  notes: >-
+    No language input. Two stacked observations in, n_action_steps actions out. Default inference is 100 DDPM steps
+    (num_inference_steps=null means num_train_timesteps). For real-time control set --policy.noise_scheduler_type=DDIM
+    --policy.num_inference_steps=10 at training time, so the saved config carries it.

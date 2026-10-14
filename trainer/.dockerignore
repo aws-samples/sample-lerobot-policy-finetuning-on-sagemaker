@@ -1,0 +1,4 @@
+# SageMaker image build context = trainer/. Only the code is needed.
+**/README.md
+**/__pycache__/
+*.pyc

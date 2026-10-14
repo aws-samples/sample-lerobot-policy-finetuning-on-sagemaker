@@ -1,0 +1,64 @@
+# Automated Security Helper (ASH, https://github.com/awslabs/automated-security-helper) configuration for this repository.
+# Every suppression below is a reviewed false positive or a deliberate design decision; the reasoning also lives in
+# docs/SECURITY.md ("Scanner suppressions"). Remove an entry when the corresponding file changes in kind.
+project_name: sample-lerobot-policy-finetuning-on-sagemaker
+fail_on_findings: true
+global_settings:
+  severity_threshold: MEDIUM
+  ignore_paths:
+    - path: cdk/template/assets/kickoff-handler/
+      reason: "Vendored aws-cdk-lib AwsCustomResource runtime, redistributed unmodified (THIRD-PARTY-LICENSES); minified JS trips RegExp and secret-keyword rules"
+    - path: cdk/template/assets/s3-auto-delete-handler/
+      reason: "Vendored aws-cdk-lib S3 auto-delete provider runtime, redistributed unmodified (THIRD-PARTY-LICENSES); minified JS, same rules as above"
+    - path: .secrets.baseline
+      reason: "detect-secrets baseline: its hashed_secret fields are hashes of the audited false positives listed below (every entry is audited as a false positive; CI fails on an unaudited one)"
+    - path: cdk/cdk.out/
+      reason: "CDK synth output (git-ignored; recreated by scanners that synthesize the app)"
+    - path: cdk/cdk.out-test/
+      reason: "test synth output (git-ignored)"
+    - path: cdk/cdk.out-test-destroy/
+      reason: "test synth output (git-ignored)"
+    - path: local_folder/
+      reason: "git-ignored private folder for local notes, never tracked (scripts/scrub_check.py enforces it)"
+  suppressions:
+    # detect-secrets: 40-hex Hugging Face commit shas and sha256 content hashes (no inline allowlist possible in JSON)
+    - rule_id: SECRET-HEX-HIGH-ENTROPY-STRING
+      path: project_config.json
+      reason: "dataset.hf_revision values: Hugging Face dataset commit shas, pinned on purpose (datasets/README.md)"
+    - rule_id: SECRET-HEX-HIGH-ENTROPY-STRING
+      path: examples/*.json
+      reason: "dataset.hf_revision values: Hugging Face dataset commit shas"
+    - rule_id: SECRET-SECRET-KEYWORD
+      path: examples/*.json
+      reason: "secrets.hf_token holds the NAME of the Secrets Manager secret (<project>/hf_token), not a token (docs/SECURITY.md, Secrets and identifiers)"
+    - rule_id: SECRET-HEX-HIGH-ENTROPY-STRING
+      path: trainer/sagemaker/Dockerfile
+      reason: "the sha256 digest that pins the Deep Learning Containers base image in the FROM line"
+    - rule_id: SECRET-AWS-ACCESS-KEY
+      path: scripts/scrub_allowlist.txt
+      reason: "the AWS documentation example access key id (AKIA...EXAMPLE), allow-listed for the scrub gate's test fixtures"
+    - rule_id: SECRET-HEX-HIGH-ENTROPY-STRING
+      path: cdk/template/assets.json
+      reason: "sha256 content hashes of the three CDK file assets (cdk/template/README.md)"
+    - rule_id: SECRET-*
+      path: cdk/template/lerobot-finetune-infra.template.json
+      reason: "exported CloudFormation template: CDK asset content hashes and CloudFormation logical resource ids that the base64 detector flags, no credential"
+    - rule_id: SECRET-HEX-HIGH-ENTROPY-STRING
+      path: trainer/policies/*.yaml
+      reason: "hub_artifacts.revision: Hugging Face model commit shas (also allowlisted inline)"
+    - rule_id: SECRET-*
+      path: tests/**
+      reason: "test fixtures only: the frozen-set sha256 (tests/test_frozen_set.py) and a fake Hub commit sha (tests/test_hub.py), both also allowlisted inline; fake EC2 instance-id fragments split by string concatenation (tests/test_scrub.py); the AWS documentation example key id AKIA...EXAMPLE and an obviously fake placeholder secret key for boto3 sessions that never send a request (tests/test_solution.py, tests/test_aws.py, tests/test_scrub.py); every entry is audited as a false positive in .secrets.baseline (docs/SECURITY.md, Scanner suppressions)"
+    # semgrep / checkov on the training container
+    - rule_id: dockerfile.security.missing-user-entrypoint.missing-user-entrypoint
+      path: trainer/sagemaker/Dockerfile
+      reason: "SageMaker training containers are started as root by the runtime, like the DLC base; the job runs with network isolation and no inbound path (docs/SECURITY.md)"
+    - rule_id: python.lang.security.audit.non-literal-import.non-literal-import
+      path: trainer/sagemaker/image_asserts.py
+      reason: "importlib.import_module iterates a literal tuple; build-time check only"
+    - rule_id: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+      path: scripts/audit_image_lock.py
+      reason: "urlopen is called with one of two fixed https OSV API endpoints"
+    - rule_id: B615
+      path: tests/test_eo1_pixel_budget_docker.py
+      reason: "downloads processor JSON files only, to measure token counts; no weights are loaded"

@@ -1,0 +1,198 @@
+<mxfile host="app.diagrams.net" modified="2026-10-07T00:00:00.000Z" agent="gen_final.py" version="24.0.0" type="device">
+  <diagram id="arch" name="Architecture">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="title" value="Set-up once per region, then one run of ./finetune.sh (steps &amp;#9312; to &amp;#9316;)" style="text;html=1;align=left;verticalAlign=middle;fontSize=16;fontStyle=1;fontColor=#232F3E;" vertex="1" parent="1">
+          <mxGeometry x="20" y="0" width="1000" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="laneLaptop" value="Laptop" style="rounded=0;whiteSpace=wrap;html=1;dashed=0;strokeColor=#7D8998;fillColor=none;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;verticalAlign=top;align=left;spacingLeft=8;spacingTop=2;fontStyle=1;fontSize=12;fontColor=#232F3E;" vertex="1" parent="1">
+          <mxGeometry x="15" y="60" width="225" height="635" as="geometry"/>
+        </mxCell>
+        <mxCell id="laneAcct" value="Your AWS account, one region" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=1;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_account;strokeColor=#CD2264;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#CD2264;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="265" y="60" width="620" height="635" as="geometry"/>
+        </mxCell>
+        <mxCell id="laneExt" value="Outside the account" style="rounded=0;whiteSpace=wrap;html=1;dashed=0;strokeColor=#D86613;fillColor=none;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;verticalAlign=top;align=left;spacingLeft=8;spacingTop=2;fontStyle=1;fontSize=12;fontColor=#B8560F;" vertex="1" parent="1">
+          <mxGeometry x="900" y="60" width="250" height="635" as="geometry"/>
+        </mxCell>
+        <mxCell id="inputs" value="project_config.json&lt;br&gt;datasets/&amp;lt;name&amp;gt;/&lt;br&gt;(your LeRobot v3.0 dataset)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor=#879196;fontColor=#232F3E;fontSize=11;" vertex="1" parent="laneLaptop">
+          <mxGeometry x="8" y="50" width="160" height="54" as="geometry"/>
+        </mxCell>
+        <mxCell id="ft" value="&lt;b&gt;./finetune.sh&lt;/b&gt; (pipeline/run.py)&lt;br&gt;with your AWS credentials:&lt;br&gt;checks the dataset, plans,&lt;br&gt;asks once; syncs, submits,&lt;br&gt;gates, reports" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor=#879196;fontColor=#232F3E;fontSize=11;" vertex="1" parent="laneLaptop">
+          <mxGeometry x="8" y="136" width="190" height="78" as="geometry"/>
+        </mxCell>
+        <mxCell id="report" value="&lt;b&gt;report&lt;/b&gt; in runs/&amp;lt;run&amp;gt;-&amp;lt;policy&amp;gt;/&lt;br&gt;model/ (unpacked model.tar.gz),&lt;br&gt;MANIFEST.json, SUMMARY.json&lt;br&gt;vs the reference numbers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor=#879196;fontColor=#232F3E;fontSize=11;" vertex="1" parent="laneLaptop">
+          <mxGeometry x="8" y="260" width="190" height="66" as="geometry"/>
+        </mxCell>
+        <mxCell id="setup" value="set-up, once per region" style="text;html=1;align=left;verticalAlign=middle;fontSize=11;fontStyle=2;fontColor=#5A6C86;" vertex="1" parent="laneLaptop">
+          <mxGeometry x="8" y="488" width="190" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="cdk" value="&lt;b&gt;cdk deploy&lt;/b&gt; (cdk/)&lt;br&gt;deploys the stack; the stack&lt;br&gt;starts the image build" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F2F3F3;strokeColor=#879196;fontColor=#232F3E;fontSize=11;" vertex="1" parent="laneLaptop">
+          <mxGeometry x="8" y="507" width="190" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="s3" value="S3 bucket&lt;br&gt;(stack resource)&lt;br&gt;sagemaker/datasets/,&lt;br&gt;hub/, jobs/" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#7AA116;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.s3;" vertex="1" parent="laneAcct">
+          <mxGeometry x="113" y="148" width="48" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="jobs" value="SageMaker jobs" style="rounded=0;whiteSpace=wrap;html=1;dashed=0;strokeColor=#01A88D;fillColor=none;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;verticalAlign=top;align=left;spacingLeft=34;spacingTop=2;fontStyle=1;fontSize=12;fontColor=#232F3E;" vertex="1" parent="laneAcct">
+          <mxGeometry x="280" y="60" width="335" height="328" as="geometry"/>
+        </mxCell>
+        <mxCell id="smIcon" value="" style="outlineConnect=0;fontColor=#232F3E;fillColor=#01A88D;strokeColor=#ffffff;dashed=0;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sagemaker;" vertex="1" parent="jobs">
+          <mxGeometry x="6" y="4" width="24" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="smoke" value="&lt;b&gt;200-step smoke job&lt;/b&gt;&lt;br&gt;network isolation on,&lt;br&gt;same image;&lt;br&gt;reads datasets/, hub/" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F7F3;strokeColor=#01A88D;fontColor=#232F3E;fontSize=11;" vertex="1" parent="jobs">
+          <mxGeometry x="6" y="73" width="135" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="train" value="&lt;b&gt;training job&lt;/b&gt;&lt;br&gt;network isolation on,&lt;br&gt;image pinned by digest;&lt;br&gt;reads datasets/, hub/;&lt;br&gt;eval vs hold-still baseline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F7F3;strokeColor=#01A88D;fontColor=#232F3E;fontSize=11;" vertex="1" parent="jobs">
+          <mxGeometry x="194" y="73" width="135" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="hub" value="&lt;b&gt;hub staging job&lt;/b&gt;&lt;br&gt;optional; CPU,&lt;br&gt;network access on;&lt;br&gt;for Hub-hosted&lt;br&gt;base weights only" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E6F7F3;strokeColor=#01A88D;fontColor=#232F3E;fontSize=11;dashed=1;" vertex="1" parent="jobs">
+          <mxGeometry x="194" y="218" width="135" height="80" as="geometry"/>
+        </mxCell>
+        <mxCell id="secrets" value="Secrets Manager&lt;br&gt;one optional secret&lt;br&gt;(Hugging Face token)" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#DD344C;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.secrets_manager;" vertex="1" parent="laneAcct">
+          <mxGeometry x="517.5" y="422" width="48" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="stack" value="The stack, once per region" style="rounded=0;whiteSpace=wrap;html=1;dashed=0;strokeColor=#879196;fillColor=#F7F7F7;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;verticalAlign=top;align=left;spacingLeft=36;spacingTop=2;fontStyle=1;fontSize=12;fontColor=#232F3E;" vertex="1" parent="laneAcct">
+          <mxGeometry x="20" y="435" width="455" height="200" as="geometry"/>
+        </mxCell>
+        <mxCell id="cfnIcon" value="" style="outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudformation;" vertex="1" parent="stack">
+          <mxGeometry x="8" y="4" width="24" height="24" as="geometry"/>
+        </mxCell>
+        <mxCell id="ssm" value="SSM parameters&lt;br&gt;the stack facts" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#E7157B;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.systems_manager;" vertex="1" parent="stack">
+          <mxGeometry x="45" y="73" width="48" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="ecr" value="ECR repository&lt;br&gt;training image" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#ED7100;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;" vertex="1" parent="stack">
+          <mxGeometry x="210" y="73" width="48" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="cb" value="CodeBuild&lt;br&gt;builds the image" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.codebuild;" vertex="1" parent="stack">
+          <mxGeometry x="370" y="73" width="48" height="48" as="geometry"/>
+        </mxCell>
+        <mxCell id="hf" value="&lt;b&gt;Hugging Face Hub&lt;/b&gt;&lt;br&gt;base weights;&lt;br&gt;public datasets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E5;strokeColor=#D86613;fontColor=#232F3E;fontSize=11;" vertex="1" parent="laneExt">
+          <mxGeometry x="100" y="287" width="140" height="66" as="geometry"/>
+        </mxCell>
+        <mxCell id="reg" value="&lt;b&gt;Public build sources&lt;/b&gt;&lt;br&gt;AWS DLC registry:&lt;br&gt;base image by digest&lt;br&gt;PyPI, apt mirrors,&lt;br&gt;download.pytorch.org:&lt;br&gt;pinned packages,&lt;br&gt;ResNet18 weights" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E5;strokeColor=#D86613;fontColor=#232F3E;fontSize=11;" vertex="1" parent="laneExt">
+          <mxGeometry x="100" y="494" width="140" height="104" as="geometry"/>
+        </mxCell>
+        <mxCell id="footnote" value="Numbers follow one run of ./finetune.sh; the &amp;#9314; gate is checked on the laptop from SUMMARY.json. Every smoke and training job runs with network isolation on and the image pinned by digest; the hub staging job is the only job with network access and the only job that reads the token secret; ./finetune.sh prompts for the token once, validates it against the Hub and stores it (or cdk deploy -c hfTokenPrompt=true). Orange edges reach outside your AWS account; dashed boxes and edges are optional. CodeBuild builds the training image in your account (about 15 min, no Docker on the laptop). Stack resources, among others: the S3 bucket (drawn above the stack box), the SSM parameters, the ECR repository, the CodeBuild project and the scoped SageMaker execution role the jobs run under. SageMaker jobs and the token secret live in your account but are not stack resources." style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=11;fontColor=#232F3E;spacing=2;" vertex="1" parent="1">
+          <mxGeometry x="20" y="705" width="1120" height="96" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_in" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.4211;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="inputs" target="ft">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_sync" value="&amp;#9312; aws s3 sync&lt;br&gt;to datasets/" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.4615;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="ft" target="s3">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="16.5" y="-22.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_submit" value="&amp;#9313; submits the jobs: hub staging (optional),&lt;br&gt;smoke, then training" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.1;exitDx=0;exitDy=0;entryX=0.2836;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="ft" target="jobs">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="252" y="203.8"/>
+              <mxPoint x="252" y="98"/>
+              <mxPoint x="640" y="98"/>
+            </Array>
+            <mxPoint x="20.4" y="22.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_read" value="checkpoints,&lt;br&gt;SUMMARY.json out" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.4167;exitDx=0;exitDy=0;entryX=0;entryY=0.35;entryDx=0;entryDy=0;startArrow=block;startFill=1;" edge="1" parent="1" source="s3" target="smoke">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-0.5" y="-22.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_pass" value="&amp;#9314; PASS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="smoke" target="train">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="0.0" y="-12.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_out" value="&amp;#9315; checkpoints, then model.tar.gz to jobs/" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;startArrow=block;startFill=1;" edge="1" parent="1" source="train" target="s3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="806.5" y="160"/>
+              <mxPoint x="402" y="160"/>
+            </Array>
+            <mxPoint x="68.2" y="16.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_report" value="&amp;#9316; downloads&lt;br&gt;model.tar.gz" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.875;entryDx=0;entryDy=0;" edge="1" parent="1" source="report" target="s3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="305" y="353"/>
+              <mxPoint x="305" y="250"/>
+            </Array>
+            <mxPoint x="0.0" y="21.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ssm" value="reads the stack facts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;jumpStyle=arc;jumpSize=10;exitX=1;exitY=0.9;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="ft" target="ssm">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="226" y="266.2"/>
+              <mxPoint x="226" y="540"/>
+              <mxPoint x="354" y="540"/>
+            </Array>
+            <mxPoint x="-76.0" y="-4.6" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_pull" value="pulls the image by digest" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0;exitY=0.9299;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="jobs" target="ecr">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="519" y="425"/>
+            </Array>
+            <mxPoint x="0.0" y="-11.5" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_hubw" value="writes base weights&lt;br&gt;to hub/" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.875;entryDx=0;entryDy=0;dashed=1;" edge="1" parent="1" source="hub" target="s3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="470" y="378"/>
+              <mxPoint x="470" y="250"/>
+            </Array>
+            <mxPoint x="121.5" y="22.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_secret" value="reads the token" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1;" edge="1" parent="1" source="hub" target="secrets">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-46.5" y="12.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_hf" value="downloads&lt;br&gt;base weights" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#D86613;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#B8560F;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.4697;entryDx=0;entryDy=0;dashed=1;" edge="1" parent="1" source="hub" target="hf">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="13.0" y="-20.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ds" value="downloads the public dataset when dataset.source is huggingface (the shipped default)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#D86613;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#B8560F;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0.9316;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;dashed=1;" edge="1" parent="1" source="ft" target="hf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="200" y="46"/>
+              <mxPoint x="1070" y="46"/>
+            </Array>
+            <mxPoint x="189.5" y="-12.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_deploy" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.485;entryDx=0;entryDy=0;" edge="1" parent="1" source="cdk" target="stack">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_base" value="pulls the base image,&lt;br&gt;pinned packages" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#D86613;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#B8560F;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=1;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.5038;entryDx=0;entryDy=0;" edge="1" parent="1" source="cb" target="reg">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-37.5" y="18.6" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_push" value="pushes the image&lt;br&gt;(image tag,&lt;br&gt;src-hash tag)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;labelBackgroundColor=#F7F7F7;exitX=0;exitY=0.3;exitDx=0;exitDy=0;entryX=1;entryY=0.3;entryDx=0;entryDy=0;" edge="1" parent="1" source="cb" target="ecr">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="0.0" y="-37.4" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_wssm" value="writes image_uri (digest-pinned),&lt;br&gt;image_src_hash" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;labelBackgroundColor=#F7F7F7;exitX=0;exitY=0.8;exitDx=0;exitDy=0;entryX=0;entryY=0.75;entryDx=0;entryDy=0;" edge="1" parent="1" source="cb" target="ssm">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="594" y="606.4"/>
+              <mxPoint x="594" y="657"/>
+              <mxPoint x="300" y="657"/>
+              <mxPoint x="300" y="604"/>
+            </Array>
+            <mxPoint x="-21.3" y="16.0" as="offset"/>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

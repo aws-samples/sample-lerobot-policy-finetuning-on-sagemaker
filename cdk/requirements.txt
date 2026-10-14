@@ -1,0 +1,7 @@
+# Python >= 3.10 (aws-cdk-lib dropped 3.9). Pinned exactly: cdk/template/*.json is exported with these versions and the drift
+# test re-synthesizes with whatever is installed; bump both together and re-run `python3 cdk/export_template.py`.
+aws-cdk-lib==2.268.0
+constructs>=10.0,<11
+cdk-nag==2.38.2
+jsonschema>=4.0
+boto3>=1.34

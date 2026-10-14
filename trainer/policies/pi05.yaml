@@ -1,0 +1,126 @@
+# Registry entry: pi0.5 (Physical Intelligence, ported from openpi), lerobot 0.6.1 policy type "pi05". Same PaliGemma-3B + 300M expert
+# as pi0 (3.6B params); state enters the prompt as 256-bin tokens (no state_proj), adaRMS expert, QUANTILES. Maintainer-owned facts.
+name: pi05
+display_name: pi0.5 (PaliGemma-3B + 300M flow-matching action expert, fine-tuned from lerobot/pi05_base)
+tier: 2
+status: trained          # 20k-step fine-tune on the public dataset 2026-09-11: joints MAE 0.350 x hold, 6/6 dims (docs/RESULTS.md); no published-number reproduction
+deliverable: false
+lerobot_type: pi05
+precision: fp32_masters_bf16_autocast   # --policy.dtype=float32 + amp_driver.py bf16 autocast (lerobot_train.py:248 maps float32 -> "no")
+base_checkpoint: lerobot/pi05_base
+hub_artifacts:               # everything fetched by name at run time -> the hub job stages these to S3 (training runs isolated)
+  - repo: lerobot/pi05_base
+    revision: b211f3d44c36b6acfcf7ae94a64e8e96f75a64ba   # pinned 2026-09-14 to the commit the hub job resolved for the recorded 20k run (_STAGED.json);  # pragma: allowlist secret
+                             # enforced by the staging cache (hub_stage.py writes refs/main -> this sha), no --policy.pretrained_revision needed; 14.47 GB fp32 safetensors
+    role: base_weights
+    gated: false
+  - repo: google/paligemma-3b-pt-224
+    revision: 35e4f46485b4d07967e7e9935bc3786aad50687c   # pinned likewise; only the tokenizer files are read and hub_stage.py stages only those (download_patterns)  # pragma: allowlist secret
+    role: text_tokenizer     # processor_pi05.py:142; gated "manual": the HF token's account must have accepted Google's terms
+    gated: true
+requires_flat_action_names: false   # only --policy.use_relative_actions=true reads action names (relative_exclude_joints)
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+max_action_dim: 32                  # actions are padded to 32 dims inside the policy; wider datasets cannot be fine-tuned
+requires_quantile_stats: true       # QUANTILES default: meta/stats.json needs q01/q99 for state+action or the FIRST BATCH raises (after the 14 GB load)
+camera_mapping_required: false      # pretrained_path takes camera keys from the dataset; slot order (base, L wrist, R wrist) = feature order
+# Weight-load check is NOT automated: look for "All keys loaded successfully!" in the training log (modeling_pi05.py:857); on any error the loader returns a RANDOM model (:812, lerobot issue #4577)
+smoke_candidate: true        # 200 GPU steps on ml.g6e.4xlarge (expert-only recipe below), maintainer-run with an HF token: PASSED 2026-09-11
+stub_reason: null            # promoted 2026-09-11: staged base (14.5 GB) + gated tokenizer, quantile stats completed in-job, 200 steps at 0.95 steps/s on L40S, reload ok (docs/RESULTS.md)
+
+licence:
+  class: terms               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: null                 # Gemma Terms of Use have no SPDX id; Hub tag "gemma". The lerobot docs' "Apache 2.0" covers code only.
+  url: https://ai.google.dev/gemma/terms
+  commercial_use: "terms"
+  weights_fetched_by: job
+  gated: true                # the tokenizer repo; the checkpoint itself is not gated
+  requires_accept: true
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    lerobot/pi05_base is tagged "gemma" on the Hub with no LICENSE file. Its PaliGemma-3B backbone is listed in the
+    Gemma Terms of Use appendix (PaliGemma was NOT relicensed to Apache-2.0 with Gemma 4). A fine-tune is a Model
+    Derivative under those terms. Section 3.1 requires passing the use restrictions through, shipping a copy of the
+    Agreement and a notice ("Gemma is provided under and subject to the Gemma Terms of Use found at
+    ai.google.dev/gemma/terms"). Section 3.2 incorporates the Prohibited Use Policy and a remote-restriction right.
+    Section 4.5 requires deletion on termination. Hosting the checkpoint behind an endpoint counts as Distribution.
+    The pretraining corpus ("robot demonstrations and large-scale multimodal data", Open X-Embodiment, unreleased PI
+    data) cannot be audited per dataset. Legal sign-off is needed before any commercial use or distribution.
+
+hardware:
+  vram_gb: 30                # ESTIMATED, not measured: 14.5 GB frozen fp32 weights + ~5 GB expert AdamW + activations at batch 8 (gc, autocast)
+  min_gpu_memory_gb: 48
+  checkpoint_gb: 19            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (MEASURED 2026-09-11: 16.1 GB fp32 weights + 2.5 GB optimizer state per checkpoint; docs/RESULTS.md)
+  hub_gb: 15.5                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.p5.4xlarge, ml.g7e.4xlarge]   # last two = 80/96 GB for a full fine-tune; their quotas default to 0 in new accounts, request them before use
+  step_rate:
+    L40S: 0.95             # 200-step smoke at batch 8 (= defaults.batch_size), chunk 50, two 480x360 cameras, expert-only fp32 masters + bf16
+                           # autocast; the recorded 20k run of 2026-09-11 held 0.93 steps/s in steady state (98 % of this) and 0.87 per billable second
+
+defaults:                    # = the recorded 20k-step run of 2026-09-11 (docs/RESULTS.md, pipeline/reference_results.json): the 48 GB expert-only
+                             # variant of the docs recipe (30k steps at batch 64 on 80 GB)
+  steps: 20000
+  batch_size: 8
+  chunk: 50                  # base was trained with chunk 50; project_config horizon_seconds derives it
+  save_freq: 1000            # each checkpoint is ~16.6 GB fp32 weights + 3.4 GB optimizer state (20 GB); the recorded run kept all 20 (~400 GB in S3): budget accordingly
+  log_freq: 100
+  seed: 1000
+
+train:
+  # ${VAR} placeholders are filled from the trainer's environment (same names as act.yaml).
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=pi05
+    - --policy.pretrained_path=lerobot/pi05_base  # weights only, features from the dataset (the pipeline may substitute the staged local dir)
+    - --policy.dtype=float32              # fp32 masters (explicit); bf16 autocast is added by amp_driver.py
+    - --policy.freeze_vision_encoder=true
+    - --policy.train_expert_only=true     # freezes the VLM: only gemma_expert + projections train -> fits 48 GB (est.)
+    - --policy.gradient_checkpointing=true
+    - --policy.chunk_size=${CHUNK}
+    - --policy.n_action_steps=${CHUNK}    # default would be 50 open-loop; docs use 10 for closed loop
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: cosine_decay_with_warmup   # warmup 1000 / decay 30000 -> 2.5e-6, auto-scaled when --steps < 30000; above, pass --policy.scheduler_decay_steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC (static Python); PyAV is used
+    - --policy.dtype=bfloat16                # HARD CAST (modeling_pi05.py:246): bf16 masters, AdamW updates below the ULP vanish
+    - --policy.dtype=float16                 # rejected by PI05Config anyway
+    - --policy.use_amp=true                  # silently ignored: policies with a dtype field bypass use_amp (lerobot_train.py:253)
+    - --policy.path                          # inherits pi05_base's ALOHA input_features, state[32] and even "device": "mps"
+    - --rename_map                           # with pretrained_path it renames the batch away (docs); mapping is a pipeline concern
+    - --policy.compile_model=true            # max-autotune: minutes of Triton autotuning, shared-memory errors on some GPUs (#2471)
+    - --peft.method_type                     # 0.6.1 default LoRA targets name state_proj/action_time_mlp_* which pi05 lacks: needs own entry
+
+eval:
+  policy_arg: pi05
+  n_samples: 4               # flow matching draws fresh noise (num_inference_steps=10) -> average several samples
+  history_frames: 1          # n_obs_steps=1; predict_action_chunk exists (modeling_pi05.py:1041), outputs sliced to the real dims
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: absolute joint positions (QUANTILES q01/q99 -> [-1,1], no clamp; padded to 32 dims, sliced back)
+  control_rate: dataset fps
+  notes: >-
+    Prompt is "Task: <task>, State: <256-bin state ints>" (tokenizer_max_length 200); the task string is mandatory.
+    Images letterboxed to 224x224 (centred padding). 10 denoising steps. Lower n_action_steps at load time for closed
+    loop. Checkpoint: about 16.6 GB of fp32 weights (the base download is 14.5 GB; each saved checkpoint adds about
+    3.4 GB of optimizer state).

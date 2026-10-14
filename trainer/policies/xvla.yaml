@@ -1,0 +1,121 @@
+# Registry entry: X-VLA 0.9B (soft-prompted flow-matching VLA on a Florence-2-large trunk), lerobot 0.6.1 policy type "xvla".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: xvla
+display_name: X-VLA 0.9B (fine-tune of lerobot/xvla-base)
+tier: 1
+status: trained          # 30k-step fine-tune on the public dataset 2026-09-11: joints MAE 0.463 x hold, 6/6 dims (docs/RESULTS.md); no published-number reproduction
+deliverable: false
+lerobot_type: xvla
+precision: fp32_masters_bf16_autocast   # run via amp_driver.py: fp32 params + AdamW moments, bf16 autocast. lerobot-train alone maps dtype=float32 -> no autocast
+base_checkpoint: lerobot/xvla-base
+hub_artifacts:               # staged by the hub job; the trainer resolves the repo ids below from the pre-populated HF cache (HF_HUB_OFFLINE=1)
+  # revisions pinned 2026-09-14 to the commits the hub job resolved for the recorded 30k run (_STAGED.json); hub_stage.py writes refs/main -> sha
+  - {repo: lerobot/xvla-base, revision: cdb7964e4fe842935d671bfab5a5ebe00a96648c, role: base_checkpoint, gated: false}   # 3.52 GB safetensors; Florence-2 + BART weights embedded  # pragma: allowlist secret
+  - {repo: facebook/bart-large, revision: cb48c1365bd826bd521f650dc2e0940aee54720c, role: tokenizer, gated: false}       # TokenizerProcessorStep reads only the 2.7 MB tokenizer files; hub_stage.py stages only those (download_patterns)  # pragma: allowlist secret
+requires_flat_action_names: false   # action_mode=auto pads by dimension (real_dim -> 20), never by name
+max_action_dim: 20                  # action_mode=auto pads the real action dim to 20 inside the policy; wider datasets cannot be fine-tuned
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+camera_mapping_required: false      # no renaming; but slot 0 = the FIRST dataset camera is the only language-grounded view, so declare the scene camera first
+smoke_candidate: true
+stub_reason: null            # promoted 2026-09-10: staged xvla-base + BART tokenizer, amp_driver fp32 masters, network isolation on (docs/RESULTS.md)
+
+licence:
+  class: terms               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0
+  url: https://huggingface.co/lerobot/xvla-base
+  commercial_use: "terms"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    lerobot/xvla-base (byte-identical to 2toINF/X-VLA-Pt) carries an apache-2.0 Hub tag and no LICENSE file. The
+    upstream code is Apache-2.0 (https://github.com/2toinf/X-VLA), the embedded Florence-2-large is MIT, and the
+    bart-large tokenizer is Apache-2.0. Disclosure: the Phase-I pretraining corpus includes AgiBot World, licensed CC
+    BY-NC-SA 4.0 (https://huggingface.co/datasets/agibot-world/AgiBotWorld-Alpha). Whether its NonCommercial and
+    ShareAlike conditions carry over into derived weights is an open legal question, so fine-tunes of this base are
+    not offered as cleared for commercial use.
+
+hardware:
+  vram_gb: 24.1              # measured (nvidia-smi peak) at batch 8, chunk 24, three 360x640 cameras, fp32 masters + bf16 autocast; 34.6 GiB at batch 16
+  min_gpu_memory_gb: 48      # A10G/L4 24 GB does not fit batch 8 under fp32 masters
+  checkpoint_gb: 7            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (ESTIMATE from the 3.3 GB published model; xvla-base + BART tokenizer staged)
+  hub_gb: 2                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6e.8xlarge, ml.p5.4xlarge, ml.g7e.4xlarge]
+  step_rate:                 # steps/s at batch 16 (= defaults.batch_size). L40S: 200-step smoke 2.27; the recorded 30k run of 2026-09-11 held 2.25 in
+                             # steady state (99 % of this) and 2.16 per billable second. Batch 8 measured 2.78 on L40S (0.360 s/step), kept here for
+                             # reference only. RTX_PRO_6000 (g7e): 5.4 is the batch-8 figure (0.184 s/step), not re-measured at batch 16 (the smoke re-measures it)
+    L40S: 2.27
+    RTX_PRO_6000: 5.4
+
+defaults:                    # = the recorded 30k-step run of 2026-09-11 (docs/RESULTS.md, pipeline/reference_results.json); the upstream recipe
+                             # ran 50k and its best checkpoint was 30000, so gate on held-out MAE, not on training loss
+  steps: 30000
+  batch_size: 16
+  chunk: 24                  # checkpoint ships 30; the domain tensors do not constrain it
+  save_freq: 5000            # ~11 GB per checkpoint (3.5 GB weights + 7 GB fp32 optimizer state): size the checkpoint volume accordingly
+  log_freq: 100
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.path=lerobot/xvla-base         # fine-tune; config.json is the base, CLI flags below override it (the hub job records the staged revision)
+    - --policy.input_features=null            # checkpoint ships image/image2/image3/state[8]; null makes make_policy rebuild the slots from the dataset (else 'Feature mismatch')
+    - --policy.action_mode=auto               # pads the real action dim to max_action_dim=20 and computes the loss on the real dims only
+    - --policy.chunk_size=${CHUNK}
+    - --policy.n_action_steps=${CHUNK}
+    - '--policy.normalization_mapping={"VISUAL":"IDENTITY","STATE":"MEAN_STD","ACTION":"MEAN_STD"}'   # shipped STATE IDENTITY would feed raw radians
+    - --policy.dtype=float32                  # fp32 masters; the bf16 autocast comes from amp_driver.py, never from this flag
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --policy.optimizer_lr=1e-4              # XVLAAdamW preset applies 0.1x to the VLM automatically
+    - --policy.optimizer_weight_decay=0.0
+    - --policy.optimizer_grad_clip_norm=1.0
+    - --policy.scheduler_warmup_steps=1000
+    - --policy.scheduler_decay_steps=${STEPS} # checkpoint default 30000 pins the LR at the floor for every step beyond it
+    - --policy.scheduler_decay_lr=1e-5
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: cosine_decay_with_warmup       # 'extend' must add the TOP-LEVEL --scheduler.num_decay_steps (the --policy. field is ignored on resume)
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC; PyAV is used
+    - --policy.dtype=bfloat16                # hard-casts the weights: AdamW updates below the bf16 ULP are discarded (measured: 79% of VLM elements never move)
+    - --policy.dtype=float16
+    - --policy.train_policy_transformer=false  # also freezes the per-domain action encoder/decoder; domain 0 ships untrained, so nothing could learn
+    - --policy.max_action_dim                # changes the dim-20 tensor shapes; the non-strict remap load drops weights silently
+    - --policy.num_domains                   # same for the dim-30 domain tensors
+    - --policy.gradient_checkpointing        # not a field in 0.6.1 (model-card template artefact)
+    - --rename_map                           # disables validate_visual_features_consistency; a one-char typo trains on N-1 cameras with a zero view
+
+eval:
+  policy_arg: xvla
+  n_samples: 4               # flow matching (10 Euler steps) is stochastic; predict_action_chunk's noise= kwarg is accepted but ignored
+  history_frames: 1          # n_obs_steps=1
+
+smoke:
+  steps: 200                 # decay_steps follows STEPS (200) and warmup (1000) exceeds it: the whole smoke runs inside the warmup ramp, which is fine for a run/no-run check
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: absolute joint positions (MEAN_STD-normalised targets, trimmed from 20 to the dataset's action dim)
+  control_rate: dataset fps
+  notes: >-
+    Language prompt required (the dataset task string, tokenised to 50 tokens by the shipped preprocessor). A single task string
+    makes the language branch a constant. Each view is letterboxed to 224x224 (16:9 frames keep 126 px of height). Domain id is
+    hard-wired to 0. Checkpoint: 3.5 GB weights.

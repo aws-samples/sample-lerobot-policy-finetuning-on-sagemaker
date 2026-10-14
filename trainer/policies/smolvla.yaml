@@ -1,0 +1,129 @@
+# Registry entry: SmolVLA, lerobot 0.6.1 policy type "smolvla" (450M flow-matching VLA: SmolVLM2-500M backbone + action expert).
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+# DEFAULT RECIPE = licence-clean variant: the action expert is trained from scratch on the Apache-2.0 SmolVLM2 backbone
+# (--policy.type=smolvla --policy.load_vlm_weights=true). lerobot/smolvla_base is NOT used: its Hub card carries a
+# license:apache-2.0 tag (checked 2026-09-23) but no LICENSE file and no statement about its robot pretraining data -> class
+# "unknown" (unresolved), not deliverable.
+name: smolvla
+display_name: SmolVLA (SmolVLM2-500M + flow-matching action expert, expert trained from scratch)
+tier: 1
+status: trained          # 20k-step fine-tune on the public dataset 2026-09-11: joints MAE 0.376 x hold, 6/6 dims (docs/RESULTS.md); no published-number reproduction
+deliverable: false
+lerobot_type: smolvla
+precision: fp32_masters_bf16_autocast   # the action expert is created in bf16; train_policy.sh launches amp_driver.py, which casts the
+                                        # trainable params to fp32 masters and runs bf16 autocast (--policy.use_amp=true is passed;
+                                        # SmolVLAConfig has no dtype field). The frozen VLM stays bf16 (never updated).
+base_checkpoint: null        # no pretrained *policy*; only the VLM backbone below is inherited
+hub_artifacts:               # fetched by name at policy construction (smolvlm_with_expert.py:93 + AutoProcessor) -> hub job stages it
+  - repo: HuggingFaceTB/SmolVLM2-500M-Video-Instruct  # pragma: allowlist secret
+    revision: 7b375e1b73b11138ff12fe22c8f2822d8fe03467   # pinned 2026-09-14 to the commit the hub job resolved for the recorded 20k run (_STAGED.json);  # pragma: allowlist secret
+                             # pretrained_revision does not apply to vlm_model_name, so the pin lives here (hub_stage.py writes refs/main -> this sha)
+    role: vlm_backbone_and_tokenizer   # ~2 GB fp32 weights + processor/tokenizer files; 16 of its LLM layers are used
+    gated: false
+requires_flat_action_names: false
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+max_action_dim: 32                  # actions are padded to 32 dims inside the policy; wider datasets cannot be fine-tuned
+camera_mapping_required: false   # from-scratch: make_policy builds input_features from the dataset, any camera keys work.
+                                 # ONLY the smolvla_base variant needs observation.images.camera1/2/3 (pipeline concern, not a
+                                 # --rename_map here: train.py:933 rejects rename_map without a pretrained checkpoint).
+smoke_candidate: true        # 200 GPU steps on ml.g6e.4xlarge, public dataset (two 480x360 cameras): PASSED 2026-09-10, 4.77 steps/s; 4-task set PASSED 2026-09-14, 4.55 steps/s (docs/RESULTS.md)
+stub_reason: null            # promoted 2026-09-10: from-scratch expert on staged SmolVLM2, fp32 masters, 4.8 steps/s at batch 16 (docs/RESULTS.md)
+
+licence:
+  class: clean               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0
+  url: https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct
+  commercial_use: "yes"
+  weights_fetched_by: job    # the SmolVLM2 backbone is downloaded by the job (staged to S3 by the hub job); no policy weights
+  gated: false
+  requires_accept: false
+  requires_approval: false
+  verified_on: "2026-09-23"
+  notice: >-
+    The action expert and all projections are trained from scratch on your dataset with lerobot 0.6.1 (Apache-2.0).
+    The only inherited weights are HuggingFaceTB/SmolVLM2-500M-Video-Instruct (Apache-2.0, "We release the SmolVLM2
+    checkpoints under the Apache 2.0 license"), used frozen. The robot-pretrained lerobot/smolvla_base is deliberately
+    not used. Its Hub card carries a license:apache-2.0 tag (checked 2026-09-23; earlier it had none), but the repository
+    has no LICENSE file and no statement about the terms of its pretraining data (481 community SO-100 datasets, most of
+    which carry the Apache-2.0 tag the upload tool applies by default, not an explicit grant). A fine-tune from it would
+    fall in class "unknown" (unresolved) and not be deliverable. This entry forbids loading that base (--policy.path is a
+    forbidden flag). If you fork the entry to use it, give the fork licence class "unknown" and record your acceptance in
+    project_config.json.
+
+hardware:
+  vram_gb: 12                # ESTIMATED, not measured: frozen VLM bf16 0.7 GB + expert fp32/AdamW ~1.6 GB + activations at batch 8;
+                             # an architecture-based estimate gives 10-20 GB at batch 64 with 3 cameras; peak VRAM was not recorded in the smoke or the 20k run
+  min_gpu_memory_gb: 24
+  checkpoint_gb: 3            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (ESTIMATE: 450M params fp32 + AdamW; SmolVLM2 backbone staged)
+  hub_gb: 2                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6e.xlarge, ml.g5.4xlarge]   # g5 24 GB only at batch <= 32 (unverified)
+  step_rate:
+    L40S: 4.77             # 200-step smoke at batch 16 (= defaults.batch_size), two 480x360 cameras, fp32 masters + bf16 autocast; the recorded
+                           # 20k run of 2026-09-11 held 4.58 steps/s in steady state (96 % of this) and 4.03 per billable second (start-up,
+                           # checkpoint writes, eval and publish included)
+
+defaults:                    # = the recorded 20k-step run of 2026-09-11 (docs/RESULTS.md, pipeline/reference_results.json); the upstream recipe uses batch 64
+  steps: 20000
+  batch_size: 16             # the batch the step rate above was measured at; the upstream recipe uses 64 (about 4x fewer steps/s: the smoke re-measures)
+  chunk: 50                  # 1.67 s at 30 fps (smolvla_base pretraining horizon); project_config horizon_seconds derives it
+  save_freq: 5000
+  log_freq: 200
+  seed: 1000
+
+train:
+  # ${VAR} placeholders are filled from the trainer's environment (same names as act.yaml).
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=smolvla
+    - --policy.load_vlm_weights=true      # default false builds a RANDOM SmolVLM (smolvlm_with_expert.py:99); the Colab notebook omits it
+    - --policy.chunk_size=${CHUNK}
+    - --policy.n_action_steps=${CHUNK}    # open-loop eval executes the whole chunk; serving may lower it at load time
+    - --policy.use_amp=true               # bf16 autocast with fp32 expert masters (no weight cast); ignored on CPU
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false          # push_to_hub stamps apache-2.0 on any fine-tune whose licence is None (pretrained.py)
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: cosine_decay_with_warmup   # preset: warmup 1000, decay 30000 -> 2.5e-6; auto-scales when --steps < 30000
+                                        # (optim/schedulers.py); for --steps > 30000 pass --policy.scheduler_decay_steps=<steps>
+                                        # or the LR sits at the floor for the remainder. 'extend' adds --scheduler.num_decay_steps.
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC (static Python); PyAV is used
+    - --policy.dtype=bfloat16                # SmolVLAConfig has no dtype field (model-card template flag); draccus parse error
+    - --policy.dtype=float16
+    - --policy.gradient_checkpointing=true   # does not exist in SmolVLAConfig 0.6.1 (model-card template flag)
+    - --policy.train_expert_only=false       # unfreezes the VLM whose weights were loaded in bf16 -> bf16 masters, AdamW updates
+                                             # below the bf16 ULP are discarded (the X-VLA trap); needs a fp32 VLM load first
+    - --policy.path                          # would load lerobot/smolvla_base (licence class unknown: Apache-2.0 tag, no licence text) under a "clean" entry
+    - --policy.pretrained_path               # same reason; the base-checkpoint variant needs its own registry entry
+    - --rename_map                           # camera mapping is a pipeline concern; rejected by lerobot on fresh init anyway
+
+eval:
+  policy_arg: smolvla
+  n_samples: 4               # flow matching draws fresh noise every call (num_steps=10) -> average several samples, as for xvla
+  history_frames: 1          # n_obs_steps=1
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: absolute joint positions (MEAN_STD normalised; padded to 32 dims internally, sliced back to the dataset's)
+  control_rate: dataset fps
+  notes: >-
+    Language prompt required (TokenizerProcessorStep raises if the task is None). Send the byte-identical task string
+    used in training (lerobot issue #4548). Images are letterboxed to 512x512 (padding top-left). One observation in,
+    n_action_steps actions out.

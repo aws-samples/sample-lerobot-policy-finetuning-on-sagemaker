@@ -1,0 +1,130 @@
+{
+  "_comment": "Reference numbers the report compares a run against. Keyed by policy, then dataset name (the datasets/<name> folder); a band is applied only for the matching dataset; other datasets get the table without a verdict. Metrics from the reference runs recorded before this repository (held-out episodes 0 13 26 30 43 56 69 79, stride 1); job names and paths deliberately omitted.",
+  "act": {
+    "pick-and-place-v3.0": {
+      "reference_runs": [
+        {
+          "label": "act_c24 (EC2 L40S, 2026-08-18, 100k steps)",
+          "joints_mae": 0.04323,
+          "joints_ratio": 0.679,
+          "grippers_mae": 0.00158,
+          "grippers_ratio": 0.404,
+          "gripper_timing": "16/16",
+          "beats_hold": "14/16"
+        },
+        {
+          "label": "SageMaker reproduction (ml.g6e.16xlarge, 2026-09-09, 100k steps)",
+          "joints_mae": 0.04271,
+          "joints_ratio": 0.671,
+          "grippers_mae": 0.0016,
+          "grippers_ratio": 0.408,
+          "gripper_timing": "16/16",
+          "beats_hold": "14/16"
+        }
+      ],
+      "band": {
+        "_comment": "one-sided: PASS when every bound holds; REPEAT when only joints_mae sits in (pass, repeat]; FAIL otherwise (the two reference runs differ by 0.0005 across hardware; cuDNN is nondeterministic)",
+        "joints_mae_pass": 0.0435,
+        "joints_mae_repeat": 0.0445,
+        "joints_ratio_max": 0.7,
+        "grippers_mae_max": 0.0017,
+        "grippers_ratio_max": 0.42,
+        "gripper_timing": "16/16",
+        "beats_hold_min": 14,
+        "suspiciously_good_joints_mae": 0.04
+      }
+    },
+    "svla_so101_pickplace": {
+      "_comment": "Public dataset (lerobot/svla_so101_pickplace @ v3.0, Apache-2.0): 50 episodes, 2 cameras 480x640 -> 480x360, 30 fps, 6 joints in degrees. Reference = this repository's own run; two runs (on-demand 0.424x, Spot 0.421x), no band yet.",
+      "reference_runs": [
+        {
+          "label": "ACT public reference (ml.g6e.4xlarge, 2026-09-10, 100k steps, chunk 30, held-out 0 10 20 30 40)",
+          "joints_mae": 4.305,
+          "joints_ratio": 0.424,
+          "grippers_mae": null,
+          "grippers_ratio": null,
+          "gripper_timing": null,
+          "beats_hold": "6/6"
+        },
+        {
+          "label": "ACT public reference, managed Spot (ml.g6e.4xlarge, 2026-09-14, 100k steps, chunk 30, held-out 0 10 20 30 40; 3276 s billable)",
+          "joints_mae": 4.274,
+          "joints_ratio": 0.421,
+          "grippers_mae": null,
+          "grippers_ratio": null,
+          "gripper_timing": null,
+          "beats_hold": "6/6"
+        }
+      ],
+      "band": null
+    }
+  },
+  "smolvla": {
+    "svla_so101_pickplace": {
+      "_comment": "Public dataset (lerobot/svla_so101_pickplace @ v3.0, Apache-2.0), same held-out episodes as the ACT reference; eval stride 10 with 4 samples (the band rule needs stride 1, so runs on this dataset get a reference row, not a verdict). Reference = this repository's own run; no band (one run).",
+      "reference_runs": [
+        {
+          "label": "SmolVLA trained (ml.g6e.4xlarge, 2026-09-11, 20k steps, batch 16, chunk 50, held-out 0 10 20 30 40, stride 10 x 4 samples; SmolVLM2-500M-Video-Instruct @ 7b375e1b73b1)",
+          "joints_mae": 5.458,
+          "joints_ratio": 0.376,
+          "grippers_mae": null,
+          "grippers_ratio": null,
+          "gripper_timing": null,
+          "beats_hold": "6/6"
+        }
+      ],
+      "band": null
+    }
+  },
+  "xvla": {
+    "svla_so101_pickplace": {
+      "_comment": "Public dataset (lerobot/svla_so101_pickplace @ v3.0, Apache-2.0), same held-out episodes as the ACT reference; eval stride 10 with 4 samples (no verdict on this dataset). Reference = this repository's own run; no band (one run). Base weights lerobot/xvla-base under the publisher's terms.",
+      "reference_runs": [
+        {
+          "label": "X-VLA trained (ml.g6e.4xlarge, 2026-09-11, 30k steps, batch 16, chunk 24, held-out 0 10 20 30 40, stride 10 x 4 samples; xvla-base @ cdb7964e4fe8, bart-large tokenizer @ cb48c1365bd8)",
+          "joints_mae": 4.031,
+          "joints_ratio": 0.463,
+          "grippers_mae": null,
+          "grippers_ratio": null,
+          "gripper_timing": null,
+          "beats_hold": "6/6"
+        }
+      ],
+      "band": null
+    }
+  },
+  "pi0": {
+    "svla_so101_pickplace": {
+      "_comment": "Public dataset (lerobot/svla_so101_pickplace @ v3.0, Apache-2.0), same held-out episodes as the ACT reference; eval stride 10 with 4 samples (no verdict on this dataset). Reference = this repository's own run; no band (one run). Base lerobot/pi0_base + gated google/paligemma-3b-pt-224 tokenizer under their publishers' terms.",
+      "reference_runs": [
+        {
+          "label": "pi0 trained (ml.g6e.4xlarge, 2026-09-11, 20k steps, batch 8, chunk 50, held-out 0 10 20 30 40, stride 10 x 4 samples; pi0_base @ 25c379b52ba2, paligemma-3b-pt-224 tokenizer @ 35e4f46485b4)",
+          "joints_mae": 5.4,
+          "joints_ratio": 0.372,
+          "grippers_mae": null,
+          "grippers_ratio": null,
+          "gripper_timing": null,
+          "beats_hold": "6/6"
+        }
+      ],
+      "band": null
+    }
+  },
+  "pi05": {
+    "svla_so101_pickplace": {
+      "_comment": "Public dataset (lerobot/svla_so101_pickplace @ v3.0, Apache-2.0) with q01/q99 completed in-job (ensure_quantiles.py), same held-out episodes as the ACT reference; eval stride 10 with 4 samples (no verdict on this dataset). Reference = this repository's own run; no band (one run). Base lerobot/pi05_base + gated google/paligemma-3b-pt-224 tokenizer under their publishers' terms.",
+      "reference_runs": [
+        {
+          "label": "pi0.5 trained (ml.g6e.4xlarge, 2026-09-11, 20k steps, batch 8, chunk 50, held-out 0 10 20 30 40, stride 10 x 4 samples; pi05_base @ b211f3d44c36, paligemma-3b-pt-224 tokenizer @ 35e4f46485b4)",
+          "joints_mae": 5.074,
+          "joints_ratio": 0.35,
+          "grippers_mae": null,
+          "grippers_ratio": null,
+          "gripper_timing": null,
+          "beats_hold": "6/6"
+        }
+      ],
+      "band": null
+    }
+  }
+}

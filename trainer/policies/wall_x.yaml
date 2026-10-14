@@ -1,0 +1,109 @@
+# Registry entry: WALL-OSS / Wall-X (Qwen2.5-VL-3B + MoE action expert, flow matching), lerobot 0.6.1 policy type "wall_x".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+# Flag names verified against policies/wall_x/configuration_wall_x.py and configs/train.py in the release image (2026-09-10).
+# DELIBERATELY NOT OFFERED: licence class blocked. The entry exists so preflight can refuse it with a precise reason.
+name: wall_x
+display_name: WALL-OSS (Wall-X, Qwen2.5-VL-3B + MoE action expert)
+tier: 2
+status: stub                 # validated | trained | smoke-tested | stub
+deliverable: false
+lerobot_type: wall_x
+precision: fp32_masters_bf16_autocast   # required by this repo's rule but NOT achievable in 0.6.1: WallXPolicy.__init__ hard-casts
+                                        # the whole model to bf16 (to_bfloat16_for_selected_params) with no dtype flag or opt-out
+base_checkpoint: x-square-robot/wall-oss-flow   # policy.pretrained_name_or_path; 4.22 B params, 8.45 GB bf16 safetensors
+hub_artifacts:               # fetched by transformers cached_file/AutoProcessor at construction; a local dir works for pretrained_name_or_path
+  - {repo: x-square-robot/wall-oss-flow, revision: 44e827683819957d8c574e8b746a1a97e77f518a, role: base weights + Qwen tokenizer/processor with 2072 added action tokens, gated: false}   # pinned 2026-09-23 (HF API)  # pragma: allowlist secret
+  - {repo: lerobot/fast-action-tokenizer, revision: 3d4d8dd847c5333f1cb0f54d00074ba22b14a5b7, role: FAST action tokenizer, only for prediction_mode=fast with trust_remote_code (never used here), gated: false}   # pinned 2026-09-23 (HF API), the same commit pi0_fast pins  # pragma: allowlist secret
+requires_flat_action_names: false      # state/action are positionally zero-padded to 20 dims; names are not parsed
+out_of_scope: true                  # not offered by this repository: licence blocked (the gate refuses it) and 80 GB class
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+camera_mapping_required: false         # camera keys are rendered verbatim into the prompt ("<key> view: <image>")
+smoke_candidate: false
+stub_reason: >-
+  Licence class blocked (see the licence notice): the gate refuses it whatever accept_licence says. Also: the code
+  forces every weight to bf16 with no way to keep fp32 copies (the precision trap in docs/TRAPS.md) and only supports
+  the slowest attention implementation, so this repository's precision rule cannot be met for a 4.2 B-parameter model.
+
+licence:
+  class: blocked             # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: null                 # nothing declared on the weights; the blocking instrument is the backbone's Qwen Research licence
+  url: https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/blob/main/LICENSE
+  commercial_use: "no"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: true
+  verified_on: "2026-09-10"
+  notice: >-
+    Not offered by this repository. The x-square-robot/wall-oss-flow card carries no licence (its only tags are
+    safetensors and qwen2_5_vl). The X-Square-Robot/wall-x GitHub LICENSE (Apache-2.0) covers the code only, and the
+    lerobot documentation's "Apache 2.0" wording is a Hugging Face assertion (Hub PR #2, open since 2026-06-01), not a
+    grant by the publisher. The backbone is Qwen/Qwen2.5-VL-3B-Instruct under the Qwen RESEARCH LICENSE AGREEMENT
+    ("FOR NON-COMMERCIAL PURPOSES ONLY"), which X Square cannot relicense. The pretraining data (paper Table 1)
+    includes AgiBot World, CC BY-NC-SA 4.0.
+
+hardware:
+  vram_gb: 34                # estimated, not measured: 4.22 B params hard-cast to bf16 with bf16 AdamW moments, before activations
+  min_gpu_memory_gb: 80      # the doc's batch 32 is far beyond 48 GB; fp32 masters (if a fork allowed them) would be ~68 GB static
+  instance_types: [ml.p5.4xlarge, ml.g7e.4xlarge]
+  step_rate: {}              # nothing measured; expect several times X-VLA's 0.36 s/step (4.8x params, eager attention)
+
+defaults:                    # the lerobot doc's command, with the batch reduced to something that can exist on one GPU
+  steps: 3000
+  batch_size: 8
+  chunk: 32                  # upstream default (action_horizon); project_config horizon_seconds derives it for the dataset fps
+  save_freq: 1000            # each checkpoint is ~8.4 GB weights + ~17 GB optimizer state
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=wall_x
+    - --policy.pretrained_name_or_path=x-square-robot/wall-oss-flow   # the doc's table says pretrained_path; that base-class field is not wall_x's loading path
+    - --policy.prediction_mode=diffusion     # "fast" pulls lerobot/fast-action-tokenizer with trust_remote_code=True
+    - --policy.attn_implementation=eager     # the only value __post_init__ accepts; sdpa/flash_attention_2 raise ValueError
+    - --policy.chunk_size=${CHUNK}
+    - --policy.n_action_steps=${CHUNK}
+    - --policy.scheduler_decay_steps=${STEPS}   # default 100000 would leave a 3000-step run on the warm end of the cosine
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false             # defaults to true; without it TrainPipelineConfig raises "'repo_id' argument missing"
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: cosine_decay_with_warmup   # 'extend' must also pass the top-level --scheduler.num_decay_steps
+  forbidden_flags:
+    - --policy.prediction_mode=fast          # executes remote code from the Hub inside the training container
+    - --policy.attn_implementation=sdpa      # ValueError in WallXConfig.__post_init__
+    - --policy.attn_implementation=flash_attention_2
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC; PyAV is used
+
+eval:
+  policy_arg: wall_x
+  n_samples: 4               # flow-matching ("diffusion") sampling from noise is stochastic
+  history_frames: 1          # n_obs_steps=1, observation_delta_indices=None
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: dataset action space, positionally zero-padded to 20 slots whose pretrained meaning is EE-pose/gripper/head/base
+  control_rate: dataset fps
+  notes: >-
+    Images are resized so the longest side is 256, then Qwen smart_resize rounds to multiples of 28 px (about 45
+    visual tokens per camera). With a single task string the prompt is identical for every sample and no text loss is
+    computed (labels are all -100).

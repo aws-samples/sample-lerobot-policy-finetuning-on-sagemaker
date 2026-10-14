@@ -1,0 +1,5 @@
+-r requirements.txt
+pytest>=9.0.3          # PYSEC-2026-1845 fixed in 9.0.3
+bandit>=1.7
+pyflakes>=3.2
+detect-secrets==1.5.0   # secret scan against .secrets.baseline (CI step and scripts/verify_fresh_clone.sh)

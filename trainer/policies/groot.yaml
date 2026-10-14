@@ -1,0 +1,116 @@
+# Registry entry: NVIDIA GR00T N1.7 3B (Cosmos-Reason2-2B / Qwen3-VL backbone + flow-matching DiT head), lerobot 0.6.1 policy type "groot".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: groot
+display_name: GR00T N1.7 3B (fine-tune of nvidia/GR00T-N1.7-3B)
+tier: 2
+status: smoke-tested     # 200-step GPU smoke passed 2026-09-14 on lerobot/svla_so101_pickplace, ml.g6e.4xlarge (48 GB was enough at batch 8) (docs/RESULTS.md)
+deliverable: false
+lerobot_type: groot
+precision: fp32_masters_bf16_autocast   # launched through amp_driver.py (fp32 masters + bf16 autocast); upstream: model_params_fp32=true upcasts every param at load, use_bf16=true wraps forward in torch.autocast(bf16)
+base_checkpoint: nvidia/GR00T-N1.7-3B
+hub_artifacts:               # staged by the hub job; the trainer resolves both ids from the pre-populated HF cache (HF_HUB_OFFLINE=1)
+  - {repo: nvidia/GR00T-N1.7-3B, revision: 2fc962b973bccdd5d8ce4f67cc63b264d6886495, role: base_checkpoint, gated: false, ignore_patterns: []}   # pinned 2026-09-23 (HF API); stage EVERY file: lerobot calls snapshot_download offline, which refuses an incomplete snapshot (training_args.bin)          # 6.93 GB: 2 bf16 shards + statistics/processor/embodiment_id json; NO tokenizer files  # pragma: allowlist secret
+  - {repo: nvidia/Cosmos-Reason2-2B, revision: 9ce19a195e423419c349abfc86fd07178b230561, role: tokenizer_image_video_processor, gated: true, ignore_patterns: ["*.safetensors", "*.bin"]}  # pinned 2026-09-23 (HF API; the sha is public metadata, the files are gated); repo id is a module constant (no CLI knob); gated=auto: needs an HF account that accepted NVIDIA's terms  # pragma: allowlist secret
+requires_flat_action_names: true    # use_relative_actions reads features["action"]["names"]; relative_exclude_joints substring-matches those names
+max_action_dim: 132                 # actions are zero-padded to 132 dims inside the policy; wider datasets are refused
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+camera_mapping_required: false      # new_embodiment has no checkpoint camera keys: cameras are taken in sorted key order (warning) and must share H,W
+smoke_candidate: true        # PASSED 2026-09-14 on ml.g6e.4xlarge (svla, batch 8); needs approval_ref + a token whose account accepted nvidia/Cosmos-Reason2-2B
+stub_reason: null            # promoted 2026-09-14: smoke PASS at 2.17 steps/s on L40S (batch 8, fp32 masters), 100% of 537 trainable tensors moved, reload ok; NVIDIA licence accepted with approval_ref, Cosmos terms accepted by the token's account (docs/RESULTS.md)
+
+licence:
+  class: terms               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: LicenseRef-NVIDIA-Open-Model-License   # no SPDX id; NVIDIA Open Model License (NOML) per the model card
+  url: https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/
+  commercial_use: "terms"
+  weights_fetched_by: job
+  gated: true                # the Cosmos-Reason2-2B processor repo is gated, GR00T-N1.7-3B itself is not
+  requires_accept: true
+  requires_approval: true
+  verified_on: "2026-09-10"
+  notice: >-
+    nvidia/GR00T-N1.7-3B has no Hub licence tag. Its model card says NVIDIA Open Model License ("ready for
+    commercial/non-commercial use"), but the LICENSE file in the same revision
+    (https://huggingface.co/nvidia/GR00T-N1.7-3B/raw/main/LICENSE) is an older "NVIDIA License" whose section 3.3
+    limits use to non-commercial research and evaluation. The NVIDIA Open Model License is revocable, requires
+    distributing the Agreement plus a "Licensed by NVIDIA Corporation under the NVIDIA Open Model License" notice, and
+    Cosmos-based products must display "Built on NVIDIA Cosmos" (whether this applies to fine-tunes is unverified).
+    Cosmos-Reason2-2B is gated (licence tag "other"). The pretraining mix likely includes AgiBot World (CC BY-NC-SA
+    4.0). The dataset list is unpublished. GR00T N1.5 is unsupported by lerobot 0.6.1 and its card is non-commercial.
+    Obtain NVIDIA's written confirmation before any commercial use or distribution.
+
+hardware:
+  vram_gb: 40                # ESTIMATE (peak not recorded): NVIDIA quotes "<~35 GB" at batch 32 with a bf16 backbone; lerobot's fp32 upcast adds ~6 GB. The 2026-09-14 smoke fit a 48 GB L40S at batch 8
+  min_gpu_memory_gb: 48
+  checkpoint_gb: 26            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (ESTIMATE from the smoke: 12.6 GB fp32 model.safetensors + ~13 GB training_state; base 6.9 GB + Cosmos processor files)
+  hub_gb: 7                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.p5.4xlarge, ml.g7e.4xlarge, ml.g6e.4xlarge]   # 80/96 GB first; the 48 GB L40S fits at batch 8 (smoke 2026-09-14), larger batches unmeasured
+  step_rate:
+    L40S: 2.17             # measured, 200-step smoke 2026-09-14, batch 8, fp32 masters + bf16 autocast
+
+defaults:                    # doc recipe (20K steps) with the batch cut from 64 to fit 48 GB; chunk 24 keeps the horizon comparable with act
+  steps: 20000
+  batch_size: 8
+  chunk: 24                  # hard cap 40 = the checkpoint's action horizon for new_embodiment
+  save_freq: 5000            # each checkpoint is ~12 GB of fp32 weights plus optimizer state
+  log_freq: 100
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=groot
+    - --policy.base_model_path=nvidia/GR00T-N1.7-3B   # a raw NVIDIA checkpoint has no 'type' in config.json, so --policy.path cannot load it
+    - --policy.embodiment_tag=new_embodiment          # picks one of 32 CategorySpecificLinear slots; the base's embodiment_id.json maps it to slot 0 without a warning
+    - --policy.chunk_size=${CHUNK}                    # <= 40: action_delta_indices is min(chunk, checkpoint horizon 40); 50 is silently remapped to 40
+    - --policy.n_action_steps=${CHUNK}
+    - --policy.use_relative_actions=true              # doc recipe for a new embodiment; builds horizon stats over the whole dataset at start-up
+    - '--policy.relative_exclude_joints=["gripper"]'  # case-insensitive substring on action names keeps the gripper absolute; robots naming it 'finger' need the override
+    - --policy.use_bf16=true                          # default, explicit so the log shows it: bf16 autocast around forward
+    - --policy.model_params_fp32=true                 # default, explicit: fp32 masters. false stores bf16 params (the ULP-freeze trap)
+    - --policy.max_steps=${STEPS}                     # warmup = ceil(max_steps*0.05) reads THIS field, not --steps (the doc command omits it and gets 500 warmup steps)
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}                           # no gradient accumulation in lerobot-train 0.6.1: batch is VRAM-bound
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND                             # the dataset backend; GrootConfig.video_backend='decord' is a dead N1.5 field and decord is not imported anywhere
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: none            # preset is DiffuserSchedulerConfig(cosine): its length is derived from --steps at every launch and it has NO num_decay_steps field, so 'extend' adds only --steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC; PyAV is used
+    - --policy.dtype                         # not a GrootConfig field (draccus rejects it); precision is use_bf16 + model_params_fp32
+    - --policy.model_params_fp32=false       # bf16-stored params: AdamW updates below the bf16 ULP vanish
+    - --policy.chunk_size=50                 # N1.5-era value, silently remapped to 40
+    - --policy.lora_rank                     # dead field ("never-wired" in 0.6.1)
+    - --policy.tokenizer_assets_repo         # N1.5 tripwire, raises
+    - --policy.path=nvidia/GR00T-N1.7-3B     # raw checkpoint has no 'type'; use base_model_path
+
+eval:
+  policy_arg: groot
+  n_samples: 4               # flow matching (4 denoising steps from the checkpoint) is stochastic
+  history_frames: 1          # n_obs_steps=1. With use_relative_actions=true select_action raises NotImplementedError: use predict_action_chunk + the postprocessor
+
+smoke:
+  steps: 200
+  max_minutes: 120           # 12.6 GB fp32 checkpoint + training_state, publish copy and two full policies in smoke_checks
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: state-relative joint deltas with an absolute gripper, decoded to absolute positions by the postprocessor
+  control_rate: dataset fps
+  notes: >-
+    Language prompt required (dataset task string, lowercased and stripped of punctuation). Frames are squashed to
+    256x256 (shortest edge 256, crop 0.95, no letterbox). 3B parameters, about 12 GB of fp32 weights resident after
+    load. NVIDIA quotes 16 GB or more for inference.

@@ -1,0 +1,107 @@
+# Registry entry: VLA-JEPA (Qwen3-VL-2B + V-JEPA2 latent world model + DiT-B flow head), lerobot 0.6.1 policy type "vla_jepa".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: vla_jepa
+display_name: VLA-JEPA (Qwen3-VL-2B + V-JEPA2 world model)
+tier: 2
+status: stub                 # validated | trained | smoke-tested | stub
+deliverable: false
+lerobot_type: vla_jepa
+precision: fp32_masters_bf16_autocast   # config default torch_dtype=bfloat16 hard-casts Qwen + V-JEPA2 (no fp32 masters); we load fp32 and let amp_driver.py autocast
+base_checkpoint: lerobot/VLA-JEPA-Pretrain   # DROID pretrain: 2 exterior 224x224 views, action 7 / state 8, chunk 7
+hub_artifacts:               # everything the job pulls by name at __init__ (qwen_interface.py:37,41; modeling_vla_jepa.py:105-109)
+  - {repo: lerobot/VLA-JEPA-Pretrain, revision: e946c3e5b538d760f4b4ff239d1b1c12090c041d, role: base_checkpoint, gated: false}   # pinned 2026-09-23 (HF API)  # pragma: allowlist secret
+  - {repo: Qwen/Qwen3-VL-2B-Instruct, revision: 89644892e4d85e24eaac8bacfd4f463576704203, role: vlm_backbone_and_processor, gated: false}     # pinned 2026-09-23 (HF API); weights overwritten by the base, processor kept  # pragma: allowlist secret
+  - {repo: facebook/vjepa2-vitl-fpc64-256, revision: b3c1679b7c34d3255ef3547f27c7b226aefab26f, role: video_encoder, gated: false}           # pinned 2026-09-23 (HF API); only when enable_world_model=true (default)  # pragma: allowlist secret
+requires_flat_action_names: false
+out_of_scope: true                  # not offered by this repository: licence blocked (SSv2 data licence agreement)
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+camera_mapping_required: true   # checkpoint config lists DROID keys exterior_1_left/_2_left; --policy.input_features=null rebuilds them from the dataset
+smoke_candidate: false
+stub_reason: >-
+  Licence class blocked (see the licence notice): the gate refuses it whatever accept_licence says. Also: no
+  single-GPU memory figure has been published (the paper trained on 8 A100s at batch 32 each), the training image does
+  not install the qwen-vl-utils package this policy imports, and the action chunk is fixed at 7 steps by the
+  checkpoint.
+
+licence:
+  class: blocked             # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0           # the HF tag on lerobot/VLA-JEPA-Pretrain; no licence text exists upstream (ginwind/VLA-JEPA GitHub has no LICENSE)
+  url: https://www.qualcomm.com/content/dam/qcomm-martech/dm-assets/documents/jester_something_something_exercise_research_license_final_qti_28jul2022.pdf
+  commercial_use: "no"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: true    # moot: class blocked never passes licence.py
+  verified_on: "2026-09-10"
+  notice: >-
+    Not offered. lerobot/VLA-JEPA-Pretrain is tagged apache-2.0 (Qwen3-VL-2B-Instruct Apache-2.0, V-JEPA2 MIT), but it
+    was pretrained on Something-Something-v2 (arXiv 2602.10098), whose Data License Agreement limits derived models
+    ("Results") to non-profit research and cannot be sublicensed. Deliberately excluded from this repository's smoke
+    tests.
+
+hardware:
+  vram_gb: 48                # estimate, UNVERIFIED: 6.2 GB bf16 weights + fp32 masters/AdamW for ~2.4B trainable exceeds 48 GB; 80 GB for full fine-tune
+  min_gpu_memory_gb: 48      # freeze_qwen=true (head-only) is the only 48 GB path, and it silently disables the world model
+  instance_types: [ml.p5.4xlarge, ml.p4d.24xlarge, ml.g6e.4xlarge]
+  step_rate: {}              # never measured
+
+defaults:
+  steps: 20000               # paper real-robot fine-tune budget (global batch 256); single-GPU value UNVERIFIED
+  batch_size: 8
+  chunk: 7                   # pinned: chunk_size*4 special action tokens are baked into the Qwen embedding/lm_head shapes
+  save_freq: 5000
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.path=lerobot/VLA-JEPA-Pretrain          # type is read from the checkpoint; --policy.type must NOT be passed alongside --policy.path
+    - --policy.input_features=null                     # factory.py rebuilds input slots from the dataset only when input_features is empty
+    - --policy.reinit_modules=["model.action_model.action_encoder","model.action_model.action_decoder","model.action_model.state_encoder"]   # 7/8-dim DROID -> your dims
+    - --policy.torch_dtype=float32                     # fp32 masters; modeling_vla_jepa.py:203 already autocasts the Qwen forward to bf16
+    - --policy.binarize_gripper_action=false           # default gripper_dim=6 snaps action index 6 to {0,1}; wrong for most joint-space datasets
+    - --policy.pre_snap_gripper_action=false
+    - --policy.scheduler_decay_steps=${STEPS}          # default 30000 would floor the LR at 2.5e-6 for the rest of a longer run
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: cosine_decay_with_warmup   # warmup 1000, decay to 2.5e-6; 'extend' must add the top-level --scheduler.num_decay_steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec
+    - --policy.torch_dtype=bfloat16          # hard-casts weights; AdamW updates vanish below the bf16 ULP (see docs/TRAPS.md)
+    - --policy.torch_dtype=float16
+    - --policy.chunk_size                    # any value other than 7 mismatches the embedding/lm_head shapes on load
+    - --policy.freeze_qwen=true              # silently sets enable_world_model=false and reads source-robot readouts (lerobot issue #4414)
+    - --rename_map                           # disables the visual-feature consistency check; camera mapping is done by the pipeline
+
+eval:
+  policy_arg: vla_jepa
+  n_samples: 3               # flow-matching head, 4 inference steps, fresh noise per call -> stochastic
+  history_frames: 8          # observation_delta_indices=range(8): a forward-looking 8-frame clip per camera, loaded even with the world model off
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 8
+  action_space: dataset action space (ACTION MIN_MAX normalised, clipped to [-1, 1])
+  control_rate: dataset fps
+  notes: >-
+    Language-conditioned (prompt_template). predict_action_chunk returns 7 steps. resize_images_to applies at
+    inference only; training uses the native resolution.

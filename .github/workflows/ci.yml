@@ -1,0 +1,57 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  host-tests:
+    # Everything here runs without AWS credentials, Docker or a GPU. The docker/aws-marked tests are developer lanes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.10"
+      - run: pip install -r requirements-dev.txt
+      - name: scrub gate (no account ids, keys, tokens, private addresses, internal hosts or resource ids; local_folder/ untracked)
+        run: bash scripts/scrub_check.sh
+      - name: secret scan (detect-secrets against .secrets.baseline; a finding not audited as a false positive fails)
+        run: |
+          detect-secrets scan --baseline .secrets.baseline   # installed by requirements-dev.txt
+          python3 - <<'EOF'
+          import json, sys
+          results = json.load(open(".secrets.baseline"))["results"]
+          unaudited = [(f, s["line_number"], s["type"]) for f, ss in results.items() for s in ss if s.get("is_secret") is not False]
+          for f, n, t in unaudited:
+              print(f"UNAUDITED {f}:{n} {t}  (a false positive: detect-secrets audit .secrets.baseline, or a pragma: allowlist secret comment)")
+          sys.exit(1 if unaudited else 0)
+          EOF
+      - name: unit tests
+        run: pytest
+      - name: docs/POLICIES.md matches the registry
+        run: python3 -m pipeline.policies_doc --check
+      - name: shell syntax
+        run: |
+          shopt -s globstar nullglob
+          for f in **/*.sh; do bash -n "$f"; done
+      - name: bandit
+        run: bandit -q -r pipeline trainer cdk scripts inference -x tests,cdk/.venv,cdk/cdk.out,cdk/cdk.out-test -ll   # Medium and High findings fail the build
+  cdk-synth:
+    # aws-cdk-lib needs Python >= 3.10; synth needs no AWS credentials.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: "22"
+      - run: npm install -g aws-cdk
+      - run: pip install -r requirements-dev.txt -r cdk/requirements.txt
+      - name: synth + cdk-nag + template assertions
+        run: pytest tests/test_cdk_template.py -m "not docker and not aws"

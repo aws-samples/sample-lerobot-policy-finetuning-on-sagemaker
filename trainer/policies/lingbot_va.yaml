@@ -1,0 +1,117 @@
+# Registry entry: LingBot-VA (autoregressive video-action world model on the Wan2.2 stack), lerobot 0.6.1 policy type "lingbot_va".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: lingbot_va
+display_name: LingBot-VA (Wan2.2 video-action world model)
+tier: 2
+status: smoke-tested     # 200-step LoRA smoke passed 2026-09-14 on hjkso1406/so101-4tasks-100eps @ 52df842e, ml.g6e.4xlarge (docs/RESULTS.md)
+deliverable: false
+lerobot_type: lingbot_va
+precision: fp32_masters_bf16_autocast   # config default dtype=bfloat16 hard-casts the 5B dual-stream transformer; fp32 masters + amp_driver.py autocast
+base_checkpoint: lerobot/lingbot_va_base   # 5.09B-param trainable transformer only (LIBERO layout: 2 cameras, 7 of 30 action channels)
+hub_artifacts:               # the frozen Wan VAE + UMT5-XXL + tokenizer are NOT in the checkpoint; pulled lazily from wan_pretrained_path at first forward
+  - {repo: lerobot/lingbot_va_base, revision: 0cbf21e0, role: base_checkpoint, gated: false}
+  - {repo: robbyant/lingbot-va-base, revision: 68b7bc1b, role: frozen_vae_text_encoder_tokenizer, gated: false, ignore_patterns: ["transformer/*"]}   # ~20 GB (config comment); diffusers-style vae/ text_encoder/ tokenizer/
+requires_flat_action_names: false
+max_action_dim: 30                  # used_action_channel_ids scatter the dataset's channels into a 30-d action space; wider datasets cannot be fine-tuned
+requires_language: true             # conditions on the dataset task string (compat check: 0 tasks = blocked, 1 task = constant language)
+base_config_patch:               # applied by train_policy.sh to the staged base snapshot's config.json before training: draccus MERGES
+  input_features: {}             # dict overrides, so --policy.input_features={} cannot empty LIBERO's 3 cameras / 14-dim action; empty
+  output_features: {}            # dicts make make_policy rebuild both from the dataset (validate_visual_features_consistency then passes)
+camera_mapping_required: true   # obs_cam_keys defaults to LIBERO keys; the pipeline must pass --policy.obs_cam_keys=[...] in dataset order (latents concatenate on width)
+smoke_candidate: true        # 200 steps on ml.g6e.4xlarge with LoRA (r 16) on hjkso1406/so101-4tasks-100eps; base + robbyant assets staged (~15 GB after ignore_patterns)
+stub_reason: null            # promoted 2026-09-14: LoRA (r 16) smoke PASS at 0.11 steps/s on L40S (batch 1, UMT5 on CPU), 100% of 240 lora_B tensors moved, reload ok (docs/RESULTS.md)
+
+licence:
+  class: unknown             # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0           # HF tags on lerobot/lingbot_va_base and robbyant/lingbot-va-base; Wan2.2 is Apache-2.0; corpus terms not verified
+  url: https://huggingface.co/robbyant/lingbot-va-base
+  commercial_use: "unknown"
+  weights_fetched_by: job
+  gated: false
+  requires_accept: true
+  requires_approval: true    # unknown corpus: record who read the instrument before any job is submitted
+  verified_on: "2026-09-10"
+  notice: >-
+    lerobot/lingbot_va_base (converted from robbyant/lingbot-va-base), and the frozen Wan2.2 VAE and UMT5-XXL encoder
+    it pulls at run time, are tagged apache-2.0 on the Hub. No licence text and no statement about the robot training
+    data were found, so nobody has been able to check the publisher's terms. Treat the licence as unresolved and check
+    it yourself before relying on a fine-tune of this base.
+
+hardware:
+  vram_gb: 48                # estimate, UNVERIFIED: 5B transformer bf16 10 GB + Wan VAE; UMT5-XXL (~11 GB) stays on CPU by default
+  min_gpu_memory_gb: 48      # LoRA only; full fine-tune with fp32 masters + AdamW (~80 GB for the transformer alone) needs 80-96 GB
+  checkpoint_gb: 1            # per saved checkpoint incl. optimizer state, for sm_jobs.volume_gb (LoRA: adapter checkpoints are < 1 GB; hub channel lingbot_va_base 10 GB + robbyant assets ~5 GB (transformer/ excluded))
+  hub_gb: 15                 # staged hub channel size (0 = nothing staged)
+  instance_types: [ml.p5.4xlarge, ml.p4de.24xlarge, ml.g6e.4xlarge]
+  step_rate:
+    L40S: 0.11             # measured, 200-step LoRA smoke 2026-09-14, batch 1, fp32 masters + bf16 autocast, UMT5-XXL text encoder on CPU
+
+defaults:
+  steps: 20000               # UNVERIFIED; upstream train.py uses warmup 1000 then constant LR 1e-5
+  batch_size: 1              # 16-frame clip per camera through the VAE per sample; larger batches unmeasured
+  chunk: 16                  # read-only property: frame_chunk_size (4) * action_per_frame (4); --policy.chunk_size does not exist
+  save_freq: 5000
+  log_freq: 200
+  seed: 1000
+
+train:
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.path=lerobot/lingbot_va_base            # type read from the checkpoint; never pass --policy.type alongside --policy.path
+    - --policy.attn_mode=flex                          # modeling_lingbot_va.py:299 raises unless flex; default 'torch' is inference-only
+    - --policy.dtype=float32                           # fp32 masters; utils.py:936-942 still casts latents to bf16 internally
+    - --policy.text_encoder_device=cpu                 # UMT5-XXL runs once per episode; on GPU it costs ~11 GB
+    - --policy.obs_cam_keys=[${CAMERA_KEYS}]           # the base's keys are LIBERO's; latents concatenate on width per camera (default layout: any count)
+    - --peft.method_type=lora                          # 5.09B fp32 masters + AdamW = 81 GB: only LoRA fits a 48 GB L40S
+    - --peft.r=16
+    - --peft.lora_alpha=32
+    - --peft.target_modules=["to_q","to_k","to_v","to_out.0"]   # quoted: draccus parses list items as YAML scalars; mandatory: PreTrainedPolicy._build_peft_config has no default targets for this policy
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+    - when: ACTION_CHANNEL_IDS                          # set by train_policy.sh from the dataset action dim ("[0,...,D-1]"); the base default mis-reshapes other widths
+      arg: "--policy.used_action_channel_ids=${ACTION_CHANNEL_IDS}"
+      after: "--policy.attn_mode"
+  scheduler: none            # preset is ConstantWithWarmupSchedulerConfig (warmup only, NO num_decay_steps field): 'extend' may add only --steps
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec
+    - --policy.dtype=bfloat16                # hard-casts weights; AdamW updates vanish below the bf16 ULP (see docs/TRAPS.md)
+    - --policy.dtype=float16
+    - --policy.attn_mode=torch               # training raises; flex is mandatory
+    - --policy.attn_mode=flashattn
+    - --rename_map                           # camera order is a --policy.obs_cam_keys concern handled by the pipeline
+
+eval:
+  policy_arg: lingbot_va
+  n_samples: 3               # two CFG flow samplers (video 20 steps, action 50 steps) with fresh noise -> stochastic
+  reset_per_call: true       # predict_action_chunk is autoregressive (KV cache): the harness resets before every frame
+  no_history: true           # observation_delta_indices are the clip the policy assembles itself from raw frames; feed one frame
+  history_frames: 16         # observation_delta_indices = range(16): one 16-frame clip per camera at 128x128; streaming path is batch_size=1 only
+
+smoke:
+  steps: 200
+  max_minutes: 150           # UMT5-XXL on CPU per step, 25 + 50 denoising passes per evaluated frame: keep evaluation.heldout to one episode
+  checks_device: cpu         # 5 B fp32 policy: smoke_checks reads the adapter file only, no GPU needed
+  log_freq: 50
+
+serving:
+  frames_per_camera: 16
+  action_space: dataset action channels scattered into a 30-d space; QUANTILES (q01/q99) un-normalisation from the checkpoint
+  control_rate: dataset fps
+  notes: >-
+    Language-conditioned through UMT5. predict_action_chunk returns 16 actions and updates a KV cache.
+    Single-environment streaming evaluation only.

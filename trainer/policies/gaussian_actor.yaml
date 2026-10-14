@@ -1,0 +1,103 @@
+# Registry entry: Gaussian actor (SAC / HIL-SERL actor), lerobot 0.6.1 policy type "gaussian_actor".
+# Maintainer-owned facts. Users choose and configure policies in the repo-root project_config.json, never here.
+name: gaussian_actor
+display_name: Gaussian actor (SAC / HIL-SERL, tanh-squashed diagonal Gaussian)
+tier: 0
+status: stub                 # validated | trained | smoke-tested | stub
+deliverable: false           # licence-clean but RL-only: not a lerobot-train imitation recipe
+lerobot_type: gaussian_actor
+precision: fp32              # config has no dtype field; MLP actor + optional frozen encoder
+base_checkpoint: null        # default recipe: vision_encoder_name=null, a small CNN encoder trained from scratch
+hub_artifacts: []            # default recipe downloads nothing. Optional HIL-SERL encoder, NOT used by default:
+#  - {repo: lerobot/resnet10, revision: null, role: frozen vision encoder (--policy.vision_encoder_name=lerobot/resnet10,
+#     loaded with transformers AutoModel trust_remote_code=true), gated: false}   # apache-2.0, verified live 2026-09-10
+requires_flat_action_names: false
+requires_reward: true               # RL actor: trained by the lerobot.rl learner from rewards, never from an imitation dataset
+out_of_scope: true                  # not offered by this repository: RL-only actor (no lerobot-train path, no imitation dataset)
+smoke_candidate: false       # reason: RL-only -- lerobot-train's loop does `loss, out = policy.forward(batch)`
+                             # (lerobot_train.py:170) but GaussianActorPolicy.forward returns a dict of sampled actions and
+                             # log-probs (modeling_gaussian_actor.py:98-112); it is trained by lerobot.rl (actor/learner
+                             # processes, gym env, SAC critics), and the hilserl extra (gym-hil, placo) is not in the image
+stub_reason: >-
+  Reinforcement-learning actor, not an imitation policy. lerobot trains it with the separate lerobot.rl learner and
+  actor processes against a live simulator, not with lerobot-train on a recorded dataset, so this pipeline cannot
+  compute a loss for it. It also emits one action at a time (predict_action_chunk raises NotImplementedError), so the
+  open-loop chunk evaluator cannot score it. Registered for completeness. No SageMaker recipe in v1.0.
+
+licence:
+  class: clean               # clean | terms | research_only | non_commercial | none | unknown | blocked
+  spdx: Apache-2.0
+  url: https://github.com/huggingface/lerobot/blob/v0.6.1/LICENSE
+  commercial_use: "yes"
+  weights_fetched_by: none   # becomes 'job' only if the optional lerobot/resnet10 encoder is enabled (hub staging required)
+  gated: false
+  requires_accept: false
+  requires_approval: false
+  verified_on: "2026-09-10"
+  notice: >-
+    Trained from scratch with lerobot 0.6.1 (Apache-2.0), a port of the HIL-SERL actor (rail-berkeley/hil-serl). The
+    optional frozen encoder lerobot/resnet10 (https://huggingface.co/lerobot/resnet10, apache-2.0, not gated, a
+    JAX-to-PyTorch conversion of the HIL-SERL ResNet-10) is not loaded by the default recipe. Enabling it adds a Hub
+    download at run time.
+
+hardware:
+  vram_gb: 1                 # ESTIMATED, not measured: 256-256 MLPs, latent_dim 256; the environment, not the model, sets the cost
+  min_gpu_memory_gb: 16
+  instance_types: [ml.g6e.4xlarge, ml.g6e.2xlarge, ml.g6e.xlarge, ml.g6.4xlarge, ml.g5.4xlarge, ml.g5.2xlarge, ml.g4dn.2xlarge]
+  step_rate: {}              # unmeasured; RL steps are environment-bound
+
+defaults:                    # nominal only: an RL run is sized by online_steps (1_000_000) and buffer capacities, not by --steps
+  steps: 100000
+  batch_size: 256
+  chunk: 1                   # informational: the actor emits one action per call (action_delta_indices is None); CHUNK is NOT rendered
+  save_freq: 10000
+  log_freq: 200
+  seed: 1000
+
+train:
+  # Rendered only so the type is inspectable (render_flags --policy gaussian_actor); preflight refuses stubs before submission.
+  argv:
+    - --dataset.repo_id=${REPO_ID}
+    - --dataset.root=${DS_ROOT}
+    - --dataset.episodes=${TRAIN_EPS}
+    - --policy.type=gaussian_actor
+    - --policy.vision_encoder_name=null      # default; set lerobot/resnet10 for the HIL-SERL frozen encoder (needs transformers + hub staging)
+    - --policy.freeze_vision_encoder=true    # default; the SAC learner skips encoder parameters when frozen (sac_algorithm.py:577)
+    - --policy.device=${DEVICE}
+    - --policy.push_to_hub=false
+    - --batch_size=${BATCH}
+    - --steps=${STEPS}
+    - --save_freq=${SAVE_FREQ}
+    - --log_freq=${LOG_FREQ}
+    - --num_workers=${NUM_WORKERS}
+    - --seed=${SEED}
+    - --output_dir=${LR_OUT}
+    - --job_name=${JOB_NAME}
+    - --wandb.enable=false
+  optional_argv:
+    - when: VIDEO_BACKEND
+      arg: "--dataset.video_backend=${VIDEO_BACKEND}"
+      after: "--dataset.episodes"
+  scheduler: none            # get_scheduler_preset() returns None; MultiAdamConfig with actor/critic/temperature groups at 3e-4
+  forbidden_flags:
+    - --dataset.video_backend=torchcodec     # torchcodec cannot load in the SageMaker DLC (static Python); PyAV is used
+    - --policy.dtype=bfloat16                # no such field on GaussianActorConfig
+    - --policy.dtype=float16
+
+eval:
+  policy_arg: gaussian_actor
+  n_samples: 5               # stochastic: select_action samples from the tanh-squashed Gaussian (mean available as action_mean)
+  history_frames: 1
+  # predict_action_chunk raises NotImplementedError (modeling_gaussian_actor.py:70-74); only select_action (single action) exists.
+
+smoke:
+  steps: 200
+  log_freq: 50
+
+serving:
+  frames_per_camera: 1
+  action_space: continuous actions in [-1, 1] (tanh squash) plus an optional discrete gripper head (num_discrete_actions)
+  control_rate: environment step rate
+  notes: >-
+    Single action per call, no chunking, no language input. Served by the lerobot.rl actor process, not the ACT
+    server.

@@ -1,0 +1,72 @@
+{
+  "_comment": "The only file you edit. Pick the dataset folder under datasets/, enable the policies you want, set compute. Registry facts per policy (training flags, tier, VRAM, licence class) live in trainer/policies/*.yaml and are maintained with the repo, not here. CLI flags of ./finetune.sh override anything below for one run.",
+  "project": "lerobot-finetune",
+  "secrets": {
+    "_comment": "Name of an AWS Secrets Manager secret holding a Hugging Face token. Needed only for gated base weights (pi0 / pi0.5 / pi0_fast PaliGemma tokenizer, GR00T Cosmos-Reason2 processor); read once by the base-weight staging job, never by a training job (training runs with network isolation on).",
+    "hf_token": "lerobot-finetune/hf_token"
+  },
+  "dataset": {
+    "name": "so101-4tasks-100eps",
+    "source": "huggingface",
+    "hf_repo_id": "hjkso1406/so101-4tasks-100eps",
+    "hf_revision": "52df842eec7e9425a87040528f94ab20732e42fb",
+    "s3_uri": null,
+    "downscale_height": 360,
+    "_comment": "public 4-task SO-101 set; anonymous uploader, Apache-2.0 as a card tag only: accept that licence yourself (docs/DATASETS.md)"
+  },
+  "evaluation": {
+    "_comment": "small held-out set: autoregressive decoders make every evaluated frame expensive",
+    "heldout": [
+      0,
+      100,
+      200,
+      300
+    ],
+    "stride": 60,
+    "checkpoints": [
+      "last"
+    ]
+  },
+  "compute": {
+    "_comment": "one 80 GB GPU (ml.p5.4xlarge H100, or ml.g7e.4xlarge, untested); Spot quota is often granted before on-demand.",
+    "instance_type": "ml.p5.4xlarge",
+    "spot": true,
+    "fallback_instance_types": [],
+    "volume_gb": null,
+    "runtime_multiplier": 1.5
+  },
+  "smoke": {
+    "_comment": "Before every training job a 200-step job on the same instance proves the image, dataset and flags (< $1). reuse=true skips it when an identical smoke already passed.",
+    "enabled": true,
+    "steps": 200,
+    "reuse": true
+  },
+  "policies": {
+    "_comment": "The three registry entries that need an 80 GB GPU (pi0_fast, eo1, fastwam). accept_licence acknowledges the publishers' terms (docs/POLICIES.md). eo1 (research-only) and fastwam (unknown licence) also need approval_ref: the plan refuses both entries while it is null, so fill in your own reference (who read the terms, and where that is recorded) before running.",
+    "pi0_fast": {
+      "enabled": true,
+      "accept_licence": true,
+      "batch_size": 4,
+      "horizon_seconds": 0.34
+    },
+    "eo1": {
+      "enabled": true,
+      "accept_licence": true,
+      "approval_ref": null,
+      "batch_size": 4,
+      "horizon_seconds": 1.0
+    },
+    "fastwam": {
+      "enabled": true,
+      "accept_licence": true,
+      "approval_ref": null,
+      "batch_size": 1,
+      "horizon_seconds": 1.0
+    }
+  },
+  "extra_job_tags": {},
+  "image": {
+    "_comment": "ECR tag the deploy-time CodeBuild image build pushes. Read by cdk/app.py; training jobs pin the image by digest (SSM /<project>/image_uri), never by tag.",
+    "tag": "v1"
+  }
+}

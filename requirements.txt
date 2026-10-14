@@ -1,0 +1,10 @@
+# Laptop-side dependencies (Python >= 3.10; 3.9 is end-of-life and its resolvable versions carry known advisories, see docs/SECURITY.md). No lerobot, no torch, no Docker needed to run the pipeline:
+# training runs inside the SageMaker image, the image is built by CodeBuild.
+# Versions are lower-bounded on purpose: these are thin AWS / file-format clients; the training image is what is pinned exactly.
+boto3>=1.34
+botocore>=1.34
+PyYAML>=5.4
+pyarrow>=23.0.1        # PYSEC-2026-113 fixed in 23.0.1
+numpy>=1.24
+jsonschema>=4.0
+huggingface_hub>=0.34   # dataset.source=huggingface downloads (the shipped default); 0.34 is the first release with the `hf` CLI documented in datasets/README.md

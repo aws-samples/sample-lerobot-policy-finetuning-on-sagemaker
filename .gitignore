@@ -1,0 +1,25 @@
+# never commit the hand-off or any dataset
+local_folder/
+datasets/*
+!datasets/README.md
+
+# account-specific and run-local
+runs/
+.scrub_denylist
+.env
+**/.env
+
+# build and tool output
+cdk.out/
+cdk/cdk.out-test/
+cdk/cdk.out-*/
+cdk/.venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/.cache/
+*.egg-info/
+.DS_Store
+.finetune/
+.claude/

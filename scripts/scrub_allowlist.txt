@@ -1,0 +1,5 @@
+# Strings scripts/scrub_check.py may accept, one per line, with the reason: 12-digit account ids and literals.
+763104351884  # public AWS Deep Learning Containers registry (the Dockerfile FROM image); see https://github.com/aws/deep-learning-containers/blob/master/available_images.md
+123456789012  # the AWS documentation placeholder account id, used in test fixtures and the scrub docstring
+AKIAIOSFODNN7EXAMPLE  # the AWS documentation example access key id, used in test fixtures for boto3 sessions  # pragma: allowlist secret
+opensource-codeofconduct@amazon.com  # the mailbox named in the standard CODE_OF_CONDUCT.md
