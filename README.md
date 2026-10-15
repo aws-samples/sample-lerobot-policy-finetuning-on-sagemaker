@@ -119,20 +119,33 @@ comparable with ACT's because their chunk lengths differ ([docs/WHY_NOT_VLA.md](
 
 ![Set-up once per region, then one run of ./finetune.sh: the laptop syncs the dataset to S3, submits a smoke job and a training job that pull the digest-pinned image from ECR and run with network isolation, and downloads model.tar.gz; CodeBuild builds the image in your account](docs/architecture.png)
 
-*Steps ① to ⑤ are one run of `./finetune.sh`; the paragraphs below group them. Editable source: [docs/architecture.drawio](docs/architecture.drawio).*
+*The circled numbers ① to ⑤ in the diagram are one run of `./finetune.sh`; the steps below follow them. Editable source:
+[docs/architecture.drawio](docs/architecture.drawio).*
 
-1. **Infrastructure, once per region.** A small CDK stack creates an ECR repository, an S3 bucket, a scoped SageMaker
-   execution role and a CodeBuild project that builds the training image **in your account** (about 15 minutes; no Docker on
-   your machine, no 13 GB image upload). Everything downstream finds the stack through SSM parameters.
-2. **Every run.** `./finetune.sh` checks the dataset against the enabled policies, waits for a running image build
-   (the one `cdk deploy` started, or a rebuild after a change to `trainer/`), prints one plan and asks once, then uploads what is missing and submits the jobs. For each
-   enabled policy it submits a 200-step smoke job followed by the training job. Policies whose base weights live on the Hugging Face Hub first get a CPU staging job, the only job with
-   network access. Every smoke and training job runs with network isolation on and the image pinned by digest.
-3. **Inside the job**, `trainer/sagemaker/train_entrypoint.sh` downscales the videos if needed and hands over to
-   `trainer/train_policy.sh`. That script checks the dataset again, renders the `lerobot-train` flags from the registry
-   entry, trains, and evaluates on held-out episodes against the hold-still baseline. The entrypoint then publishes the
-   newest checkpoint with the evaluation, a licence notice and a machine-readable `SUMMARY.json`.
-4. **Back on the laptop**, the report stage downloads `model.tar.gz` into `runs/<run>-<policy>/model/`, compares
+**Set-up, once per region.** `cdk deploy` creates an ECR repository, an S3 bucket, a scoped SageMaker execution role and a
+CodeBuild project, then starts the image build. CodeBuild builds the training image **in your account** (about 15 minutes;
+no Docker on your machine, no 13 GB image upload), pushes it to ECR and writes the digest-pinned `image_uri` and the other
+stack facts to SSM parameters. Everything downstream reads those parameters.
+
+Data flow of one run:
+
+1. **① Laptop to S3.** `./finetune.sh` reads the stack facts from SSM, checks the dataset against the enabled policies, waits
+   for a running image build if there is one, prints one plan and asks once. Then `aws s3 sync` uploads what is missing of
+   the dataset to `sagemaker/datasets/` in the bucket.
+2. **② Submit the jobs.** For each enabled policy: a CPU hub staging job when the base weights live on the Hugging Face Hub
+   (the only job with network access and the only one that reads the token secret; it writes the weights to `hub/`), then a
+   200-step smoke job, then the training job. Every smoke and training job pulls the image from ECR by digest, reads
+   `datasets/` and `hub/` from the bucket, and runs with network isolation on.
+3. **③ The gate.** The smoke job writes its checkpoints and `SUMMARY.json` back to the bucket. The laptop reads that summary
+   and submits the training job only when the gate passes: the job completed, the weights moved, no trainable parameter is
+   stored in bf16, the evaluation is finite and the reload check succeeded. The smoke's step rate sizes the training job's
+   runtime cap and cost estimate.
+4. **④ Inside the training job.** `trainer/sagemaker/train_entrypoint.sh` downscales the videos if needed and hands over to
+   `trainer/train_policy.sh`, which checks the dataset again, renders the `lerobot-train` flags from the registry entry,
+   trains, and evaluates on held-out episodes against the hold-still baseline. Checkpoints mirror to `jobs/` as they are
+   written; at the end the newest checkpoint, the evaluation, a licence notice and `SUMMARY.json` are published as
+   `model.tar.gz` under `jobs/`.
+5. **⑤ Back on the laptop.** The report stage downloads `model.tar.gz` into `runs/<run>-<policy>/model/`, compares
    `SUMMARY.json` with the reference numbers and writes `MANIFEST.json`. `inference/predict.py` shows how to load the
    checkpoint offline and predict one action chunk.
 
