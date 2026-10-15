@@ -148,11 +148,11 @@ Data flow of one run:
    and submits the training job only when the gate passes: the job completed, the weights moved, no trainable parameter is
    stored in bf16, the evaluation is finite and the reload check succeeded. The smoke's step rate sizes the training job's
    runtime cap and the hours estimate printed before it is submitted.
-- **④ Inside the training job.** `trainer/sagemaker/train_entrypoint.sh` downscales the videos if needed and hands over to
-   `trainer/train_policy.sh`, which checks the dataset again, renders the `lerobot-train` flags from the registry entry,
-   trains, and evaluates on held-out episodes against the hold-still baseline. Checkpoints mirror to `jobs/` as they are
-   written; at the end the newest checkpoint, the evaluation, a licence notice and `SUMMARY.json` are published as
-   `model.tar.gz` under `jobs/`.
+- **④ Inside the training job.** `trainer/sagemaker/train_entrypoint.sh` downscales the videos if needed and hands over
+   to `trainer/train_policy.sh`, which checks the dataset again, renders the `lerobot-train` flags from the registry
+   entry, trains, and evaluates on held-out episodes against the hold-still baseline. Checkpoints are mirrored to
+   `jobs/` as they are written; at the end the newest checkpoint, the evaluation, a licence notice and `SUMMARY.json`
+   are published as `model.tar.gz` under `jobs/`.
 - **⑤ Back on the laptop.** The report stage downloads `model.tar.gz` into `runs/<run>-<policy>/model/`, compares
    `SUMMARY.json` with the reference numbers and writes `MANIFEST.json`. `inference/predict.py` shows how to load the
    checkpoint offline and predict one action chunk.
