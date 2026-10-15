@@ -119,23 +119,31 @@ comparable with ACT's because their chunk lengths differ ([docs/WHY_NOT_VLA.md](
 
 ![Architecture: laptop, S3 bucket, SageMaker jobs, ECR and CodeBuild in your account, and the Hugging Face Hub outside it](docs/architecture.png)
 
-*The circled numbers ① to ⑤ in the diagram are one run of `./finetune.sh`; the steps below follow them. Editable source:
+*The circled numbers ① to ⑤ in the diagram are one run of `./finetune.sh`; the steps below follow them.
+Orange arrows reach outside your AWS account; dashed boxes and arrows are optional. Editable source:
 [docs/architecture.drawio](docs/architecture.drawio).*
 
-**Set-up, once per region.** `cdk deploy` creates an ECR repository, an S3 bucket, a scoped SageMaker execution role and a
-CodeBuild project, then starts the image build. CodeBuild builds the training image **in your account** (about 15 minutes;
-no Docker on your machine, no 13 GB image upload), pushes it to ECR and writes the digest-pinned `image_uri` and the other
-stack facts to SSM parameters. Everything downstream reads those parameters.
+**Set-up, once per region.** `cdk deploy` creates an ECR repository, an S3 bucket, a scoped SageMaker execution role
+that every job runs under, a CodeBuild project and the SSM parameters that record those stack facts, then starts the
+image build. CodeBuild builds the training image **in your account** (about 15 minutes; no Docker on your machine, no 13
+GB image upload), pushes it to ECR and writes the digest-pinned `image_uri` and the image's source hash to two more SSM
+parameters. Everything downstream reads those parameters. The SageMaker jobs and the token secret live in your account
+too, but the stack does not create them: `./finetune.sh` submits the jobs at run time, and the secret is created in
+Secrets Manager the first time a token is stored (with the shipped default, `cdk destroy` still deletes the
+default-named secret; see [Teardown](#teardown)).
 
 Data flow of one run:
 
 1. **① Laptop to S3.** `./finetune.sh` reads the stack facts from SSM, checks the dataset against the enabled policies, waits
    for a running image build if there is one, prints one plan and asks once. Then `aws s3 sync` uploads what is missing of
    the dataset to `sagemaker/datasets/` in the bucket.
-2. **② Submit the jobs.** For each enabled policy: a CPU hub staging job when the base weights live on the Hugging Face Hub
-   (the only job with network access and the only one that reads the token secret; it writes the weights to `hub/`), then a
-   200-step smoke job, then the training job. Every smoke and training job pulls the image from ECR by digest, reads
-   `datasets/` and `hub/` from the bucket, and runs with network isolation on.
+2. **② Submit the jobs.** For each enabled policy: a CPU hub staging job when the base weights live on the Hugging Face
+   Hub (the only job with network access and the only one that reads the token secret; it writes the weights to `hub/`),
+   then a 200-step smoke job, then the training job. Before a staging job for gated weights, `./finetune.sh` checks the
+   stored Hugging Face token against the Hub and asks for one, with hidden input, only when it is missing or rejected;
+   it stores the token in Secrets Manager (`cdk deploy -c hfTokenPrompt=true` does this at deploy time instead). Every
+   smoke and training job pulls the image from ECR by digest, reads `datasets/` and `hub/` from the bucket, and runs
+   with network isolation on.
 3. **③ The gate.** The smoke job writes its checkpoints and `SUMMARY.json` back to the bucket. The laptop reads that summary
    and submits the training job only when the gate passes: the job completed, the weights moved, no trainable parameter is
    stored in bf16, the evaluation is finite and the reload check succeeded. The smoke's step rate sizes the training job's
@@ -483,16 +491,17 @@ unlabelled, and `cdk synth` or `cdk deploy` stops with an error until you pass y
 rather than deploying a stack that is silently never counted. The committed plain template keeps the description it was
 exported with; edit its `Description` field if you opt out on that path.
 
-Coverage is partial by construction. The suffix rides on botocore's `Config(user_agent_extra=...)`, which exists only for SDK
-clients. The AWS CLI has no equivalent hook (no environment variable, no shared-config key), so these calls are not
-attributed: the `aws s3 sync` that uploads a dataset (`pipeline/run.py`), the `aws ecr`, `aws s3` and `aws ssm` commands in
-the CodeBuild image build (`cdk/lerobot_finetune/stack.py`), and the CLI calls in `trainer/sagemaker/build_and_push.sh` and
-`scripts/destroy.sh`. Two more sources are outside the repository's control: the calls the two CDK helper Lambdas make (the
-build kickoff and the delete-time cleanups run aws-cdk-lib's own code), and the S3 traffic SageMaker itself generates for
-channels, checkpoints and outputs. Training jobs run with network isolation and make no AWS calls of their own. Of the jobs
-this repository submits, only the base-weight staging job calls an AWS API (Secrets Manager, from `trainer/hub_stage.py`).
-It gets the token through the `USER_AGENT_STRING` environment variable that `pipeline/hub.py` sets on the job, because
-there is no repository checkout inside the image.
+Coverage is partial by construction. The suffix rides on botocore's `Config(user_agent_extra=...)`, which exists only
+for SDK clients. The AWS CLI has no equivalent hook (no environment variable, no shared-config key), so these calls are
+not attributed: the `aws s3 sync` that uploads a dataset (`pipeline/run.py`), the `aws ecr`, `aws s3` and `aws ssm`
+commands in the CodeBuild image build (`cdk/lerobot_finetune/stack.py`), and the CLI calls in
+`trainer/sagemaker/build_and_push.sh` and `scripts/destroy.sh`. Two more sources are outside the repository's control:
+the calls the two CDK helper Lambdas make (the build kickoff and the delete-time cleanups run aws-cdk-lib's own code),
+and the S3 traffic SageMaker itself generates for channels, checkpoints and outputs. Training jobs run with network
+isolation and make no AWS calls of their own. Of the jobs this repository submits, only the base-weight staging job
+calls an AWS API (Secrets Manager, from `trainer/hub_stage.py`). It gets the solution's user-agent suffix through the
+`USER_AGENT_STRING` environment variable that `pipeline/hub.py` sets on the job, because there is no repository checkout
+inside the image.
 
 ## Licence
 

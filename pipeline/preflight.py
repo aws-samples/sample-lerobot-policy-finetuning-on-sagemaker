@@ -231,7 +231,7 @@ def run_preflight(cfg: dict, stack: dict, sess, policies: dict, *, candidates: l
             from pipeline.aws import client as _mk
             st = _hf.status((client or (lambda n: _mk(sess, n)))("secretsmanager"), _hf.secret_name(cfg))
             rows.append(("ok" if st["state"] == "ok" else "warn", "hf token",
-                         f"{_hf.secret_name(cfg)}: {st['state']}" + (f" (user {st['user']})" if st.get("user") else "; you will be prompted before staging")))
+                         f"{_hf.secret_name(cfg)}: {st['state']}" + (f" (user {st['user']})" if st.get("user") else "; asked for before the staging job (hidden input; a dry run only reports it)")))
     for lvl, check, msg in rows:
         log(f"  {lvl.upper():4s} {check:12s} {msg}")
     fails = [m for lvl, _, m in rows if lvl == "fail"]

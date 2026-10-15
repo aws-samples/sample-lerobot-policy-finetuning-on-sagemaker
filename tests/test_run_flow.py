@@ -94,6 +94,56 @@ def test_dry_run_with_smoke_disabled_or_skipped_prints_only_the_training_spec(tm
     assert capsys.readouterr().out.count("(dry run: not submitted)") == 1
 
 
+class FakeSecretsManager:
+    """The token secret as the dry run finds it (None = no secret). Every write is a test failure: before run.py passed
+    `required=not a.dry_run`, a dry run with a gated policy prompted for the token and created the secret."""
+    def __init__(self, value=None): self.value = value; self.calls = []
+    def get_secret_value(self, SecretId):
+        self.calls.append("get")
+        if self.value is None:
+            raise ClientError({"Error": {"Code": "ResourceNotFoundException"}}, "GetSecretValue")
+        return {"SecretString": self.value}
+    def create_secret(self, **kw): raise AssertionError("dry run wrote a Secrets Manager secret")
+    def put_secret_value(self, **kw): raise AssertionError("dry run wrote a Secrets Manager secret")
+
+
+def _refuse(msg):
+    def f(*a, **k): raise AssertionError(msg)
+    return f
+
+
+def test_dry_run_with_a_gated_policy_only_reports_the_token_state(tmp_path, monkeypatch, capsys):
+    """pi0 stages the gated PaliGemma tokenizer. A dry run reads the token secret once (GetSecretValue) and reports its
+    state; it never prompts, never writes the secret, never calls the Hub without a stored token, and still reaches the
+    staging lines and both job specs (hub channel mounted, no token in the training hyperparameters)."""
+    _offline(monkeypatch, tmp_path)
+    sm_fake = FakeSecretsManager(None)
+    clients = lambda sess, service: {"s3": FakeS3(), "sagemaker": FakeSageMaker(), "secretsmanager": sm_fake}[service]
+    monkeypatch.setattr(run, "client", clients)
+    monkeypatch.setattr(run.hub, "client", clients)                                   # stage_hub builds its own S3 client
+    monkeypatch.setattr(run.hf_token, "interactive", lambda: True)                    # a terminal is present: the old code prompted here
+    monkeypatch.setattr(run.hf_token.getpass, "getpass", _refuse("dry run prompted for the token"))
+    monkeypatch.setattr(run.hf_token, "whoami", _refuse("Hub called without a stored token"))
+    cfg = json.loads(_config(tmp_path).read_text())
+    cfg["policies"] = {"pi0": {"enabled": True, "steps": 1000, "save_freq": 500, "accept_licence": True}}
+    (tmp_path / "cfg.json").write_text(json.dumps(cfg))
+    assert run.main(["--config", str(tmp_path / "cfg.json"), "--region", "us-east-1", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert sm_fake.calls == ["get"]
+    assert "NOTE hf token     lerobot-finetune/hf_token: not found" in out
+    assert "[pi0] base weights:" in out and "will stage 2 artefact(s) for pi0" in out and "google/paligemma-3b-pt-224@" in out and "(text_tokenizer) [gated]" in out
+    assert out.count("(dry run: not submitted)") == 2
+    specs = [json.loads("{\n" + chunk.split("\n  (dry run")[0]) for chunk in out.split("\n{\n")[1:]]
+    assert [[c["ChannelName"] for c in s["InputDataConfig"]] for s in specs] == [["train", "hub"], ["train", "hub"]]
+    assert all("hf_token_secret" not in s["HyperParameters"] and s["EnableNetworkIsolation"] for s in specs)
+    # a stored token the Hub rejects (401) is reported the same way: no re-prompt, no overwrite
+    sm_fake.value, sm_fake.calls = json.dumps({"token": "hf_dead"}), []
+    monkeypatch.setattr(run.hf_token, "whoami", lambda token, opener=None: {"ok": False, "user": None, "status": 401})
+    assert run.main(["--config", str(tmp_path / "cfg.json"), "--region", "us-east-1", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert sm_fake.calls == ["get"] and "NOTE hf token     lerobot-finetune/hf_token: rejected by the Hub (401)" in out and out.count("(dry run: not submitted)") == 2
+
+
 def test_stop_after_and_plan_exit_before_any_job_spec(tmp_path, monkeypatch, capsys):
     _offline(monkeypatch, tmp_path)
     cfg = _config(tmp_path)

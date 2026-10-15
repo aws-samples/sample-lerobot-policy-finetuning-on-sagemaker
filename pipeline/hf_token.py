@@ -95,7 +95,7 @@ def ensure(sm, name: str, *, log=print, prompt=None, opener=None, required: bool
         return st
     why = "not found" if st["state"] == "missing" else "rejected by the Hub (401): rotated or revoked"
     if not required:
-        log(f"  NOTE hf token     {name}: {why}; only needed for policies with gated base weights")
+        log(f"  NOTE hf token     {name}: {why}; reported only: a real run asks for it before staging (hidden input) or, without a terminal, exits 4")
         return st
     if not (prompt or (interactive() and getpass.getpass)):
         raise RuntimeError(f"Hugging Face token secret {name} {why}. Store one: aws secretsmanager put-secret-value --secret-id {name} "

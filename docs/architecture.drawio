@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2026-10-07T00:00:00.000Z" agent="gen_final.py" version="24.0.0" type="device">
+<mxfile host="app.diagrams.net" modified="2026-10-15T00:00:00.000Z" agent="gen_final.py" version="24.0.0" type="device">
   <diagram id="arch" name="Architecture">
     <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" background="#ffffff" math="0" shadow="0">
       <root>
@@ -72,9 +72,6 @@
         </mxCell>
         <mxCell id="reg" value="&lt;b&gt;Public build sources&lt;/b&gt;&lt;br&gt;AWS DLC registry:&lt;br&gt;base image by digest&lt;br&gt;PyPI, apt mirrors,&lt;br&gt;download.pytorch.org:&lt;br&gt;pinned packages,&lt;br&gt;ResNet18 weights" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF4E5;strokeColor=#D86613;fontColor=#232F3E;fontSize=11;" vertex="1" parent="laneExt">
           <mxGeometry x="100" y="494" width="140" height="104" as="geometry"/>
-        </mxCell>
-        <mxCell id="footnote" value="Numbers follow one run of ./finetune.sh; the &amp;#9314; gate is checked on the laptop from SUMMARY.json. Every smoke and training job runs with network isolation on and the image pinned by digest; the hub staging job is the only job with network access and the only job that reads the token secret; ./finetune.sh prompts for the token once, validates it against the Hub and stores it (or cdk deploy -c hfTokenPrompt=true). Orange edges reach outside your AWS account; dashed boxes and edges are optional. CodeBuild builds the training image in your account (about 15 min, no Docker on the laptop). Stack resources, among others: the S3 bucket (drawn above the stack box), the SSM parameters, the ECR repository, the CodeBuild project and the scoped SageMaker execution role the jobs run under. SageMaker jobs and the token secret live in your account but are not stack resources." style="text;html=1;align=left;verticalAlign=top;whiteSpace=wrap;fontSize=11;fontColor=#232F3E;spacing=2;" vertex="1" parent="1">
-          <mxGeometry x="20" y="705" width="1120" height="96" as="geometry"/>
         </mxCell>
         <mxCell id="e_in" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#545B64;strokeWidth=1.5;endArrow=block;endFill=1;fontColor=#232F3E;fontSize=11;labelBackgroundColor=#FFFFFF;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.4211;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="inputs" target="ft">
           <mxGeometry relative="1" as="geometry"/>

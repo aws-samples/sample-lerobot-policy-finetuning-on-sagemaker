@@ -235,11 +235,12 @@ AWS call (no stack needed). Then follow README Quick start step 4 to point `proj
 ### Several policies in one run
 
 `examples/project_config.vla.json` enables SmolVLA, X-VLA, pi0 and pi0.5 on the public dataset. The quickest look is
-`./finetune.sh --config examples/project_config.vla.json --dry-run`; [examples/README.md](../examples/README.md) says what
-the file runs, what it needs and the two ways to use it. The file already sets `accept_licence` for X-VLA, pi0 and
-pi0.5. pi0 and pi0.5 also need a Hugging Face token, which `./finetune.sh` asks for (hidden input) at their
-`base weights:` step; a non-interactive run (`CI=1`) exits 4 there instead (user steps: README, "Gated base weights and
-the Hugging Face token"; mechanics: `docs/ARCHITECTURE.md`, stages of `./finetune.sh`).
+`./finetune.sh --config examples/project_config.vla.json --dry-run`; [examples/README.md](../examples/README.md) says
+what the file runs, what it needs and the two ways to use it. The file already sets `accept_licence` for X-VLA, pi0 and
+pi0.5. pi0 and pi0.5 also need a Hugging Face token. A real run asks for it (hidden input) at their `base weights:` step
+and, without a terminal (`CI=1`), exits 4 there instead; `--dry-run` only reports the secret's state and goes on to the
+job specs (user steps: README, "Gated base weights and the Hugging Face token"; mechanics: `docs/ARCHITECTURE.md`,
+stages of `./finetune.sh`).
 
 The dry run prints, in this order:
 
@@ -248,12 +249,14 @@ The dry run prints, in this order:
 2. The `plan:` table.
 3. `stage:` once per distinct dataset.
 4. For each enabled policy, in config order, `[<policy>] base weights:` when the registry entry lists `hub_artifacts`.
-   It says either `base weights already staged: s3://.../sagemaker/hub/<policy>/` or
-   `will stage N artefact(s) for <policy> with a ml.m5.4xlarge job (network on)`. The second form is followed by one line
-   per artefact (a file the staging job downloads from the Hub), with `[gated]` where a token is needed, and by a
-   `stale staging` line with the object count and bytes of an earlier staging that a real run would delete first. The
-   staging job (`pipeline/hub.py`) is an
-   on-demand `ml.m5.4xlarge` with a 2 h cap, a 200 GB volume and network isolation off.
+   For an entry with gated artefacts an `hf token` line comes first: `OK ... valid (Hugging Face user <name>)` when the
+   secret holds a token the Hub accepts, otherwise `NOTE ...: not found` or `...: rejected by the Hub (401)`; the dry
+   run neither asks for a token nor stores one. It says either `base weights already staged:
+   s3://.../sagemaker/hub/<policy>/` or `will stage N artefact(s) for <policy> with a ml.m5.4xlarge job (network on)`.
+   The second form is followed by one line per artefact (a file the staging job downloads from the Hub), with `[gated]`
+   where a token is needed, and by a `stale staging` line with the object count and bytes of an earlier staging that a
+   real run would delete first. The staging job (`pipeline/hub.py`) is an on-demand `ml.m5.4xlarge` with a 2 h cap, a
+   200 GB volume and network isolation off.
 5. `[<policy>] smoke: 200 steps on <instance>`, or `smoke: reusing <job>` when an identical smoke already passed.
 6. `[<policy>] train: <steps> steps on <instance>`.
 
