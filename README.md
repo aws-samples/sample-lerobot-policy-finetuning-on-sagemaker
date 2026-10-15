@@ -134,7 +134,7 @@ default-named secret; see [Teardown](#teardown)).
 
 Data flow of one run:
 
-- **① Laptop to S3.** `./finetune.sh` reads the stack facts from SSM, checks the dataset against the enabled policies, waits
+- **① Laptop to S3.** `./finetune.sh` checks the dataset against the enabled policies, reads the stack facts from SSM, waits
    for a running image build if there is one, prints one plan and asks once. Then `aws s3 sync` uploads what is missing of
    the dataset to `sagemaker/datasets/` in the bucket.
 - **② Submit the jobs.** For each enabled policy: a CPU hub staging job when the base weights live on the Hugging Face
@@ -229,7 +229,7 @@ Compute cost grows in proportion to `steps`.
 | `cdk deploy` + image build (once per region) | ~15 min | ~$0.50 (CodeBuild) + ECR storage ~$1.5/month |
 | smoke job (200 steps, the gate) | ~8 min | < $1 |
 | hub staging job (per policy with base weights on the Hub; re-run when a repo or revision changes) | 8-10 min | < $1 |
-| ACT, 100k steps, the shipped public dataset (*measured*) | 1 h 54 m | ~$10 (~$5 on managed Spot, *measured*) |
+| ACT, 100k steps, the shipped public dataset (*measured*) | 1 h 54 m | ~$10 (about $5 on managed Spot, *measured*) |
 | SmolVLA, 20k steps, batch 16, the shipped public dataset (*measured*) | 1 h 23 m | ~$7 |
 | X-VLA, 30k steps, batch 16, the shipped public dataset (*measured*) | 3 h 51 m | ~$20 |
 | pi0, 20k steps, batch 8, the shipped public dataset (*measured*) | 4 h 51 m | ~$26 |
