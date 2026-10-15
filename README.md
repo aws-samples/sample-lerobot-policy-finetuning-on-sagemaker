@@ -117,7 +117,7 @@ comparable with ACT's because their chunk lengths differ ([docs/WHY_NOT_VLA.md](
 
 ## How it works
 
-![Set-up once per region, then one run of ./finetune.sh: the laptop syncs the dataset to S3, submits a smoke job and a training job that pull the digest-pinned image from ECR and run with network isolation, and downloads model.tar.gz; CodeBuild builds the image in your account](docs/architecture.png)
+![Architecture: laptop, S3 bucket, SageMaker jobs, ECR and CodeBuild in your account, and the Hugging Face Hub outside it](docs/architecture.png)
 
 *The circled numbers ① to ⑤ in the diagram are one run of `./finetune.sh`; the steps below follow them. Editable source:
 [docs/architecture.drawio](docs/architecture.drawio).*
