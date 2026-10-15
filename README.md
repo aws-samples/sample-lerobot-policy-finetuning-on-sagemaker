@@ -79,8 +79,8 @@ The table is generated from the registry (`trainer/policies/*.yaml`). How to rea
   were trained on; *terms apply* means a named licence or usage condition may bind fine-tunes.
 - **Status**: `validated`, `trained` or `smoke-tested`, as defined in [docs/POLICIES.md](docs/POLICIES.md), which also has
   the full licence notice, base checkpoint, measured GPU memory, default budget and an estimated run time and cost per
-  entry. `pi0_fast`, `eo1`, `fastwam` and `fastwam_lora` were smoke-tested on EC2 H100 hosts with the same container and
-  have not yet completed as SageMaker jobs.
+  entry. `pi0_fast`, `eo1`, `fastwam` and `fastwam_lora` passed their smoke tests on EC2 H100 hosts with the same container;
+  the other entries ran as SageMaker jobs.
 
 ### Which policy for which situation
 
@@ -134,26 +134,26 @@ default-named secret; see [Teardown](#teardown)).
 
 Data flow of one run:
 
-1. **① Laptop to S3.** `./finetune.sh` reads the stack facts from SSM, checks the dataset against the enabled policies, waits
+- **① Laptop to S3.** `./finetune.sh` reads the stack facts from SSM, checks the dataset against the enabled policies, waits
    for a running image build if there is one, prints one plan and asks once. Then `aws s3 sync` uploads what is missing of
    the dataset to `sagemaker/datasets/` in the bucket.
-2. **② Submit the jobs.** For each enabled policy: a CPU hub staging job when the base weights live on the Hugging Face
+- **② Submit the jobs.** For each enabled policy: a CPU hub staging job when the base weights live on the Hugging Face
    Hub (the only job with network access and the only one that reads the token secret; it writes the weights to `hub/`),
    then a 200-step smoke job, then the training job. Before a staging job for gated weights, `./finetune.sh` checks the
    stored Hugging Face token against the Hub and asks for one, with hidden input, only when it is missing or rejected;
    it stores the token in Secrets Manager (`cdk deploy -c hfTokenPrompt=true` does this at deploy time instead). Every
    smoke and training job pulls the image from ECR by digest, reads `datasets/` and `hub/` from the bucket, and runs
    with network isolation on.
-3. **③ The gate.** The smoke job writes its checkpoints and `SUMMARY.json` back to the bucket. The laptop reads that summary
+- **③ The gate.** The smoke job writes its checkpoints and `SUMMARY.json` back to the bucket. The laptop reads that summary
    and submits the training job only when the gate passes: the job completed, the weights moved, no trainable parameter is
    stored in bf16, the evaluation is finite and the reload check succeeded. The smoke's step rate sizes the training job's
-   runtime cap and cost estimate.
-4. **④ Inside the training job.** `trainer/sagemaker/train_entrypoint.sh` downscales the videos if needed and hands over to
+   runtime cap and the hours estimate printed before it is submitted.
+- **④ Inside the training job.** `trainer/sagemaker/train_entrypoint.sh` downscales the videos if needed and hands over to
    `trainer/train_policy.sh`, which checks the dataset again, renders the `lerobot-train` flags from the registry entry,
    trains, and evaluates on held-out episodes against the hold-still baseline. Checkpoints mirror to `jobs/` as they are
    written; at the end the newest checkpoint, the evaluation, a licence notice and `SUMMARY.json` are published as
    `model.tar.gz` under `jobs/`.
-5. **⑤ Back on the laptop.** The report stage downloads `model.tar.gz` into `runs/<run>-<policy>/model/`, compares
+- **⑤ Back on the laptop.** The report stage downloads `model.tar.gz` into `runs/<run>-<policy>/model/`, compares
    `SUMMARY.json` with the reference numbers and writes `MANIFEST.json`. `inference/predict.py` shows how to load the
    checkpoint offline and predict one action chunk.
 
@@ -344,9 +344,8 @@ aws service-quotas request-service-quota-increase --service-code sagemaker --quo
 ```
 
 If `CODE` comes back empty, the quota is still at its default: read the code from `list-aws-default-service-quotas` instead.
-An increase takes hours to a few days. Quota is not capacity: a job with quota can still wait in `Pending` when the region has
-no free GPUs of that type; stop it and resubmit with `--instance-type <type>`, or use another region (`--instance-type auto` keys on quota, not
-capacity, and returns the same type while it has quota).
+An increase takes hours to a few days. `--instance-type auto` keys on quota and returns the same type while it has quota; to run
+on another type, pass `--instance-type <type>`.
 
 ### Instance types per GPU memory class
 

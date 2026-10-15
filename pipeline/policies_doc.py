@@ -152,7 +152,7 @@ HEADER = """
   in [docs/RESULTS.md](RESULTS.md) and `pipeline/reference_results.json`. No claim beyond that.
 - `smoke-tested`: a 200-step GPU job on a public dataset trained, evaluated, published and reloaded. Most ran on SageMaker.
   `pi0_fast`, `eo1`, `fastwam` and `fastwam_lora` ran on an EC2 H100 host with the same container image, input channels and
-  environment variables as a SageMaker job, because no 80 GB SageMaker quota was available ([docs/RESULTS.md](RESULTS.md)).
+  environment variables as a SageMaker job ([docs/RESULTS.md](RESULTS.md)).
   The first `fastwam_lora` smoke ran on a private dataset and continued from an earlier `fastwam` fine-tune (advanced flow).
   The shipped default (`lerobot/fastwam_base` on `hjkso1406/so101-4tasks-100eps`) then passed its own 200-step smoke on an
   EC2 H100 host on 2026-09-22, with the adapter merge and an exact reload of the merged copy ([docs/RESULTS.md](RESULTS.md)).

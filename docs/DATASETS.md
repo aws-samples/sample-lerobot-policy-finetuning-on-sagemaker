@@ -25,9 +25,8 @@ predicts the arm stays where it is. Below 1.0 the policy has learned something.
 | `gaussian_actor`, `wall_x`, `vla_jepa` | none | | not offered by this repository ([README.md](../README.md) gives the reasons, [docs/POLICIES.md](POLICIES.md) the licence details); `./finetune.sh --compat` lists them on a separate "out of scope" line | | not offered |
 
 Step rates, instance types, batch sizes, memory peaks and gate details of every smoke test and fine-tune are in
-[docs/RESULTS.md](RESULTS.md). The four 80 GB smoke tests (`pi0_fast`, `eo1`, `fastwam`, `fastwam_lora`) ran on EC2 H100 hosts, because
-no 80 GB SageMaker instance was available at the time. Those hosts used the same container, data channels and
-hyperparameters as a SageMaker job.
+[docs/RESULTS.md](RESULTS.md). The four 80 GB smoke tests (`pi0_fast`, `eo1`, `fastwam`, `fastwam_lora`) ran on EC2 H100 hosts with the same
+container, data channels and hyperparameters as a SageMaker job.
 
 Known defects of `hjkso1406/so101-4tasks-100eps`. The per-episode image standard deviation is 0.0 in every episode, so the
 image std in `stats.json` is about 0.01-0.02 instead of a realistic 0.15. This is harmless for policies that do not
