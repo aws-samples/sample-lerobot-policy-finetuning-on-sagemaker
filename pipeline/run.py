@@ -670,7 +670,7 @@ def _main(a) -> int:
             if any(art.get("gated") for art in spec["hub_artifacts"]):   # the token: stored once, validated, never in the repo
                 sname = hf_token.secret_name(cfg)
                 try:
-                    hf_token.ensure(client(sess, "secretsmanager"), sname, log=log, required=not a.dry_run)   # a dry run only reports a missing token
+                    hf_token.ensure(client(sess, "secretsmanager"), sname, required=not a.dry_run)   # a dry run only reports a missing token; ensure() prints through its own logger (CodeQL note there)
                 except RuntimeError as e:
                     raise Abort(4, str(e))
                 cfg = {**cfg, "secrets": {**(cfg.get("secrets") or {}), "hf_token": sname}}

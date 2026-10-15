@@ -20,6 +20,14 @@ from botocore.exceptions import ClientError
 WHOAMI = "https://huggingface.co/api/whoami-v2"
 
 
+def _emit(msg: str) -> None:
+    """Default logger for ensure(). CodeQL classifies every value that comes out of a function or key named *secret*/*token*
+    as sensitive; what reaches these lines is the Secrets Manager secret's NAME (e.g. <project>/hf_token), the Hub user name
+    and a status, never the token (docs/SECURITY.md, scanner table)."""
+    # codeql[py/clear-text-logging-sensitive-data] logs the secret's name and the Hub user, never the token
+    print(msg, flush=True)
+
+
 def secret_name(cfg: dict) -> str:
     return (cfg.get("secrets") or {}).get("hf_token") or f"{cfg['project']}/hf_token"
 
@@ -83,7 +91,7 @@ def interactive() -> bool:
         return False
 
 
-def ensure(sm, name: str, *, log=print, prompt=None, opener=None, required: bool = True) -> dict:
+def ensure(sm, name: str, *, log=_emit, prompt=None, opener=None, required: bool = True) -> dict:
     """Make sure `name` holds a token the Hub accepts. Prompts (hidden input) when missing/invalid and a terminal is present;
     returns the final status. `required=False` only reports."""
     st = status(sm, name, opener)

@@ -71,6 +71,7 @@ if str(app.node.try_get_context("hfTokenPrompt") or "false").lower() in ("1", "t
             # boto3 ignores it, so pin it explicitly or the secret could land in another region than the stack
             _prompt_region = region or os.environ.get("CDK_DEFAULT_REGION")
             _sess = boto3.Session(region_name=_prompt_region) if _prompt_region else boto3.Session()
+            # codeql[py/clear-text-logging-sensitive-data] the secret's name and the Hub user, never the token (see hf_token._emit)
             _hf.ensure(get_client("secretsmanager", session=_sess), hf_token_secret, log=lambda m: print(m, file=sys.stderr), required=True)
     except (Exception, KeyboardInterrupt) as _e:   # a failed, skipped or interrupted prompt never blocks synth; finetune.sh asks again
         print(f"NOTE: Hugging Face token not stored now ({type(_e).__name__}: {_e}); finetune.sh asks when a policy needs it", file=sys.stderr)
